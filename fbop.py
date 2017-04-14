@@ -20,7 +20,12 @@ def query_by_name(first, last):
     Query the FBOP database with an inmate name.
     """
     logger.debug("Querying with name %s, %s", last, first)
-    return _query_helper(nameFirst=first, nameLast=last)
+    matches = _query_helper(nameFirst=first, nameLast=last)
+    if matches:
+        logger.debug("%d result(s) returned", len(matches))
+    else:
+        logger.debug("No results were returned")
+    return matches
 
 
 def query_by_inmate_id(inmate_id):
@@ -37,8 +42,14 @@ def query_by_inmate_id(inmate_id):
     inmate_id = format_inmate_id(inmate_id)
     logger.debug("Querying with ID %s", inmate_id)
     matches = _query_helper(inmateNum=inmate_id)
-    assert len(matches) <= 1, "Unexpectedly got multiple matches on ID"
-    return matches and matches[0] or None
+
+    if matches:
+        assert len(matches) == 1
+        logger.debug("A single result was returned")
+        return matches[0]
+    else:
+        logger.debug("No results were returned")
+        return None
 
 
 def format_inmate_id(inmate_id):
@@ -83,9 +94,6 @@ def _query_helper(**kwargs):
     inmates = ifilter(_is_in_texas, inmates)
     inmates = ifilter(_has_not_been_released, inmates)
     inmates = list(inmates)
-
-    if not inmates:
-        logger.debug("No results returned")
 
     return inmates
 

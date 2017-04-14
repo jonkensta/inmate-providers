@@ -17,7 +17,12 @@ def query_by_name(first, last):
     Query the TDCJ database with an inmate name.
     """
     logger.debug("Querying with name %s, %s", last, first)
-    return _query_helper(firstName=first, lastName=last)
+    matches = _query_helper(firstName=first, lastName=last)
+    if matches:
+        logger.debug("%d result(s) returned", len(matches))
+    else:
+        logger.debug("No results were returned")
+    return matches
 
 
 def query_by_inmate_id(inmate_id):
@@ -33,11 +38,15 @@ def query_by_inmate_id(inmate_id):
 
     logger.debug("Querying with ID %s", inmate_id)
     matches = _query_helper(tdcj=inmate_id)
-    if not matches:
-        return None
 
-    assert len(matches) == 1, "Unexpectedly got multiple matches on ID"
-    return matches[0]
+    if matches:
+        assert len(matches) == 1
+        logger.debug("A single result was returned")
+        return matches[0]
+
+    else:
+        logger.debug("No results returned")
+        return None
 
 
 def format_inmate_id(inmate_id):
@@ -84,9 +93,6 @@ def _query_helper(**kwargs):
 
     entries = map(row_to_entry, rows[1:])
     inmates = map(_entry_to_inmate, entries)
-
-    if not inmates:
-        logger.debug("No results returned")
 
     return inmates
 
