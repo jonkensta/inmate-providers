@@ -95,6 +95,12 @@ def _query_helper(**kwargs):
     inmates = ifilter(_has_not_been_released, inmates)
     inmates = list(inmates)
 
+    for inmate in inmates:
+        logger.debug(
+            "%s, %s #%s: MATCHES",
+            inmate['last_name'], inmate['first_name'], inmate['id']
+        )
+
     return inmates
 
 
@@ -109,13 +115,6 @@ def _has_not_been_released(inmate):
         # release can be a string for life sentence, etc
         released = False
 
-    if released:
-        logger.debug(
-            "%s, %s #%s: RELEASED %s",
-            inmate['last_name'], inmate['first_name'], inmate['id'],
-            inmate['release']
-        )
-
     return not released
 
 
@@ -124,19 +123,10 @@ def _is_in_texas(inmate):
     Private helper for checking if an inmate is in Texas.
     """
 
-    in_texas = (
+    return (
         (inmate['unit'] in TEXAS_UNITS) or
         (inmate['unit'] in SPECIAL_UNITS)
     )
-
-    if not in_texas:
-        logger.debug(
-            "%s, %s #%s: %s Unit NOT IN TEXAS",
-            inmate['last_name'], inmate['first_name'], inmate['id'],
-            inmate['unit']
-        )
-
-    return in_texas
 
 
 def _data_to_inmate(entry):
@@ -168,10 +158,5 @@ def _data_to_inmate(entry):
         inmate['release'] = release
 
     inmate['datetime_fetched'] = datetime.now()
-
-    logger.debug(
-        "%s, %s #%s: MATCHES",
-        inmate['last_name'], inmate['first_name'], inmate['id']
-    )
 
     return inmate
