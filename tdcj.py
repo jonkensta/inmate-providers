@@ -3,7 +3,7 @@ from datetime import datetime
 
 import requests
 from nameparser import HumanName
-from BeautifulSoup import BeautifulSoup
+from bs4 import BeautifulSoup
 
 
 logger = logging.getLogger('TDCJ')
@@ -76,7 +76,7 @@ def _query_helper(**kwargs):
     with requests.Session() as session:
         url = BASE_URL + SEARCH_PATH
         response = session.post(url, params=params)
-        soup = BeautifulSoup(response.text)
+        soup = BeautifulSoup(response.text, 'html.parser')
 
     if soup.html.head.title.text != "Offender Search List":
         return []
