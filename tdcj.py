@@ -95,8 +95,6 @@ def _query_helper(**kwargs):
     entries = map(row_to_entry, rows[1:])
     inmates = map(_entry_to_inmate, entries)
 
-    import ipdb; ipdb.set_trace()
-
     return inmates
 
 
