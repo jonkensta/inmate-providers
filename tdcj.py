@@ -78,10 +78,11 @@ def _query_helper(**kwargs):
         response = session.post(url, params=params)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-    if soup.html.head.title.text != "Offender Search List":
+    table = soup.find('table', {'class': 'tdcj_table'})
+
+    if table is None:
         return []
 
-    table = soup.find('table', {'class': 'ws'})
     rows = table.findAll('tr')
     keys = [ele.text.strip() for ele in rows[0].findAll('th')]
 
@@ -93,6 +94,8 @@ def _query_helper(**kwargs):
 
     entries = map(row_to_entry, rows[1:])
     inmates = map(_entry_to_inmate, entries)
+
+    import ipdb; ipdb.set_trace()
 
     return inmates
 
