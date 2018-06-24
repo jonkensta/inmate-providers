@@ -10,14 +10,14 @@ providers = {
 }
 
 
-def query_by_inmate_id(id_, jurisdictions=None):
+def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
     if jurisdictions is None:
         jurisdictions = ['Texas', 'Federal']
 
     inmates, errors = [], []
     for provider, module in (providers[j] for j in jurisdictions):
         try:
-            inmate = module.query_by_inmate_id(id_)
+            inmate = module.query_by_inmate_id(id_, timeout)
         except requests.exceptions.RequestException as exc:
             exc_class_name = exc.__class__.__name__
 
@@ -35,12 +35,12 @@ def query_by_inmate_id(id_, jurisdictions=None):
     return inmates, errors
 
 
-def query_by_name(first_name, last_name):
+def query_by_name(first_name, last_name, timeout=None):
     inmates, errors = [], []
     jurisdictions = ['Texas', 'Federal']
     for provider, module in (providers[j] for j in jurisdictions):
         try:
-            part = module.query_by_name(first_name, last_name)
+            part = module.query_by_name(first_name, last_name, timeout)
         except requests.exceptions.RequestException as exc:
             exc_class_name = exc.__class__.__name__
 

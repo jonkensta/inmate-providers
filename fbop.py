@@ -15,12 +15,12 @@ TEXAS_UNITS = ['BAS', 'BML', 'BMM', 'BMP', 'BSC', 'BIG', 'BRY', 'CRW', 'EDN',
 SPECIAL_UNITS = ['TEMP RELEASE', 'IN TRANSIT']
 
 
-def query_by_name(first, last):
+def query_by_name(first, last, timeout=None):
     """
     Query the FBOP database with an inmate name.
     """
     logger.debug("Querying with name %s, %s", last, first)
-    matches = _query_helper(nameFirst=first, nameLast=last)
+    matches = _query_helper(nameFirst=first, nameLast=last, timeout=timeout)
     if matches:
         logger.debug("%d result(s) returned", len(matches))
     else:
@@ -28,7 +28,7 @@ def query_by_name(first, last):
     return matches
 
 
-def query_by_inmate_id(inmate_id):
+def query_by_inmate_id(inmate_id, timeout=None):
     """
     Query the FBOP database with an inmate ID.
     """
@@ -41,7 +41,7 @@ def query_by_inmate_id(inmate_id):
 
     inmate_id = format_inmate_id(inmate_id)
     logger.debug("Querying with ID %s", inmate_id)
-    matches = _query_helper(inmateNum=inmate_id)
+    matches = _query_helper(inmateNum=inmate_id, timeout=timeout)
 
     if matches:
         assert len(matches) == 1
@@ -70,6 +70,8 @@ def _query_helper(**kwargs):
     Private helper for querying FBOP.
     """
 
+    timeout = kwargs.pop('timeout', None)
+
     params = {
         'age': '',
         'inmateNum': '',
@@ -83,12 +85,7 @@ def _query_helper(**kwargs):
     }
     params.update(kwargs)
 
-    try:
-        response = requests.post(URL, params=params)
-    except requests.exceptions.RequestException as exc:
-        msg = "Error connecting to FBOP inmates database"
-        raise requests.exceptions.ConnectionError(msg)
-
+    response = requests.post(URL, params=params, timeout=timeout)
     data = json.loads(response.text)['InmateLocator']
     inmates = imap(_data_to_inmate, data)
     inmates = ifilter(_is_in_texas, inmates)

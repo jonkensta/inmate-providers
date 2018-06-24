@@ -12,12 +12,12 @@ BASE_URL = "https://offender.tdcj.texas.gov"
 SEARCH_PATH = "/OffenderSearch/search.action"
 
 
-def query_by_name(first, last):
+def query_by_name(first, last, timeout=None):
     """
     Query the TDCJ database with an inmate name.
     """
     logger.debug("Querying with name %s, %s", last, first)
-    matches = _query_helper(firstName=first, lastName=last)
+    matches = _query_helper(firstName=first, lastName=last, timeout=timeout)
     if matches:
         logger.debug("%d result(s) returned", len(matches))
     else:
@@ -25,7 +25,7 @@ def query_by_name(first, last):
     return matches
 
 
-def query_by_inmate_id(inmate_id):
+def query_by_inmate_id(inmate_id, timeout=None):
     """
     Query the TDCJ database with an inmate id.
     """
@@ -37,7 +37,7 @@ def query_by_inmate_id(inmate_id):
         raise ValueError(msg)
 
     logger.debug("Querying with ID %s", inmate_id)
-    matches = _query_helper(tdcj=inmate_id)
+    matches = _query_helper(tdcj=inmate_id, timeout=timeout)
 
     if matches:
         assert len(matches) == 1
@@ -61,6 +61,8 @@ def _query_helper(**kwargs):
     Private helper for querying TDCJ.
     """
 
+    timeout = kwargs.pop('timeout', None)
+
     params = {
         'btnSearch': 'Search',
         'gender':    'ALL',
@@ -75,7 +77,7 @@ def _query_helper(**kwargs):
 
     with requests.Session() as session:
         url = BASE_URL + SEARCH_PATH
-        response = session.post(url, params=params)
+        response = session.post(url, params=params, timeout=timeout)
         soup = BeautifulSoup(response.text, 'html.parser')
 
     table = soup.find('table', {'class': 'tdcj_table'})
