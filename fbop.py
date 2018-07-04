@@ -86,6 +86,8 @@ def _query_helper(**kwargs):
     params.update(kwargs)
 
     response = requests.post(URL, params=params, timeout=timeout)
+    response.raise_for_status()
+
     data = json.loads(response.text)['InmateLocator']
     inmates = imap(_data_to_inmate, data)
     inmates = ifilter(_is_in_texas, inmates)

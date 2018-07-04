@@ -78,6 +78,7 @@ def _query_helper(**kwargs):
     with requests.Session() as session:
         url = BASE_URL + SEARCH_PATH
         response = session.post(url, params=params, timeout=timeout)
+        response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
 
     table = soup.find('table', {'class': 'tdcj_table'})
