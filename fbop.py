@@ -1,6 +1,5 @@
 import json
 import requests
-from itertools import imap, ifilter
 
 import logging
 from datetime import date, datetime
@@ -89,9 +88,9 @@ def _query_helper(**kwargs):
     response.raise_for_status()
 
     data = json.loads(response.text)['InmateLocator']
-    inmates = imap(_data_to_inmate, data)
-    inmates = ifilter(_is_in_texas, inmates)
-    inmates = ifilter(_has_not_been_released, inmates)
+    inmates = map(_data_to_inmate, data)
+    inmates = filter(_is_in_texas, inmates)
+    inmates = filter(_has_not_been_released, inmates)
     inmates = list(inmates)
 
     for inmate in inmates:
