@@ -22,7 +22,7 @@ def query_by_name(first, last, timeout=None):
         logger.debug("%d result(s) returned", len(list(matches)))
     else:
         logger.debug("No results were returned")
-    return matches
+    return list(matches)
 
 
 def query_by_inmate_id(inmate_id, timeout=None):
@@ -42,7 +42,7 @@ def query_by_inmate_id(inmate_id, timeout=None):
     if matches:
         assert len(list(matches)) == 1
         logger.debug("A single result was returned")
-        return matches[0]
+        return list(matches)[0]
 
     else:
         logger.debug("No results returned")
