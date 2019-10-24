@@ -1,27 +1,35 @@
+"""
+TDCJ inmate query implementation.
+"""
+
 import logging
 from datetime import datetime
+from urllib.parse import urljoin
 
 import requests
-from nameparser import HumanName
+
 from bs4 import BeautifulSoup
+from nameparser import HumanName
 
-
-logger = logging.getLogger('TDCJ')
+LOGGER = logging.getLogger('PROVIDERS.TDCJ')
 
 BASE_URL = "https://offender.tdcj.texas.gov"
-SEARCH_PATH = "/OffenderSearch/search.action"
+SEARCH_PATH = "OffenderSearch/search.action"
 
 
 def query_by_name(first, last, timeout=None):
     """
     Query the TDCJ database with an inmate name.
     """
-    logger.debug("Querying with name %s, %s", last, first)
+
+    LOGGER.debug("Querying with name %s, %s", last, first)
     matches = _query_helper(firstName=first, lastName=last, timeout=timeout)
-    if matches:
-        logger.debug("%d result(s) returned", len(matches))
-    else:
-        logger.debug("No results were returned")
+
+    if not matches:
+        LOGGER.debug("No results were returned")
+        return []
+
+    LOGGER.debug("%d result(s) returned", len(matches))
     return matches
 
 
@@ -36,17 +44,19 @@ def query_by_inmate_id(inmate_id, timeout=None):
         msg = "{} is not a valid Texas inmate number".format(inmate_id)
         raise ValueError(msg)
 
-    logger.debug("Querying with ID %s", inmate_id)
+    LOGGER.debug("Querying with ID %s", inmate_id)
     matches = _query_helper(tdcj=inmate_id, timeout=timeout)
 
-    if matches:
-        assert len(matches) == 1
-        logger.debug("A single result was returned")
-        return matches[0]
+    if not matches:
+        LOGGER.debug("No results returned")
+        return []
 
-    else:
-        logger.debug("No results returned")
-        return None
+    if len(matches) > 1:
+        LOGGER.error("Multiple results were returned for an ID query")
+        return matches
+
+    LOGGER.debug("A single result was returned")
+    return matches
 
 
 def format_inmate_id(inmate_id):
@@ -56,12 +66,10 @@ def format_inmate_id(inmate_id):
     return '{:08d}'.format(int(inmate_id))
 
 
-def _query_helper(**kwargs):
+def _query_helper(timeout=None, **kwargs):
     """
     Private helper for querying TDCJ.
     """
-
-    timeout = kwargs.pop('timeout', None)
 
     params = {
         'btnSearch': 'Search',
@@ -76,9 +84,15 @@ def _query_helper(**kwargs):
     params.update(kwargs)
 
     with requests.Session() as session:
-        url = BASE_URL + SEARCH_PATH
+        url = urljoin(BASE_URL, SEARCH_PATH)
         response = session.post(url, params=params, timeout=timeout)
-        response.raise_for_status()
+
+        try:
+            response.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            exc_class_name = exc.__class__.__name__
+            LOGGER.error("Query returned %s request exception", exc_class_name)
+
         soup = BeautifulSoup(response.text, 'html.parser')
 
     table = soup.find('table', {'class': 'tdcj_table'})
@@ -95,8 +109,9 @@ def _query_helper(**kwargs):
         entry['href'] = row.find('a').get('href')
         return entry
 
-    entries = map(row_to_entry, rows[1:])
+    entries = map(row_to_entry, rows[1:])  # first row contains column names
     inmates = map(_entry_to_inmate, entries)
+    inmates = list(inmates)
 
     return inmates
 
@@ -115,20 +130,25 @@ def _entry_to_inmate(entry):
 
     inmate['race'] = entry.get('Race', None)
     inmate['sex'] = entry.get('Gender', None)
-    inmate['url'] = BASE_URL + entry['href'] if 'href' in entry else None
+
+    if 'href' in entry:
+        inmate['url'] = urljoin(BASE_URL, entry['href'])
+
+    else:
+        inmate['url'] = None
 
     release_string = entry['Projected Release Date']
     try:
         release = datetime.strptime(release_string, "%Y-%m-%d").date()
     except ValueError:
         release = release_string
-        logger.debug("Failed to convert release date to date: %s", release)
+        LOGGER.debug("Failed to convert release date to date: %s", release)
     finally:
         inmate['release'] = release
 
     inmate['datetime_fetched'] = datetime.now()
 
-    logger.debug(
+    LOGGER.debug(
         "%s, %s #%s: MATCHES",
         inmate['last_name'], inmate['first_name'], inmate['id']
     )
