@@ -18,5 +18,6 @@ setup(
     author='Jonathan Starr',
     url='https://github.com/jonkensta/inmate-providers',
     license=LICENSE,
-    packages=find_packages()
+    packages=find_packages(),
+    install_requires=['bs4', 'requests', 'nameparser'],
 )
