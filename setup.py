@@ -12,7 +12,7 @@ with open('LICENSE') as infile:
 
 setup(
     name='pymates',
-    version='0.1.0',
+    version='0.1.1',
     description='Module for programatically finding Texas inmates',
     long_description=README,
     author='Jonathan Starr',
