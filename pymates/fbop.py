@@ -107,7 +107,11 @@ def _query_helper(timeout=None, **kwargs):
         exc_class_name = exc.__class__.__name__
         LOGGER.error("Query returned %s request exception", exc_class_name)
 
-    data = json.loads(response.text)['InmateLocator']
+    try:
+        data = json.loads(response.text)['InmateLocator']
+    except KeyError:
+        return []
+
     inmates = map(_data_to_inmate, data)
     inmates = filter(_is_in_texas, inmates)
     inmates = filter(_has_not_been_released, inmates)
