@@ -21,6 +21,9 @@ project = 'pymates'
 copyright = '2019, Inside Books Project'
 author = 'Inside Books Project'
 
+# -- General configuration ---------------------------------------------------
+
+master_doc = 'index'
 
 # -- General configuration ---------------------------------------------------
 
