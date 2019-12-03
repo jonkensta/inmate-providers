@@ -1,5 +1,6 @@
 venv
 *.pyc
+docs/build
 __pycache__
 .mypy_cache
 pymates.egg-info

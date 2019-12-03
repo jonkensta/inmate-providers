@@ -1,5 +1,4 @@
-"""
-Base interface module.
+"""IBP inmate search utility.
 """
 
 import logging
@@ -19,7 +18,7 @@ PROVIDERS = {
 
 
 def aggregate_results(query_func):
-    """Aggregate the results of the query function together"""
+    """Aggregate the results of the query function together."""
 
     @functools.wraps(query_func)
     def inner(*args, **kwargs):
@@ -36,7 +35,25 @@ def aggregate_results(query_func):
 
 @aggregate_results
 def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
-    """Query jurisdictions with an inmate ID"""
+    """Query jurisdictions with an inmate ID.
+
+    :param id_: Numeric identifier of the inmate.
+    :type id_: int or str
+
+    :param jurisdictions: List of jurisdictions to search.
+        If `None`, then all available jurisdictions are searched.
+
+    :type jurisdictions: None or iterable
+
+    :param timeout: Time in seconds to wait for HTTP requests to complete.
+    :type timeout: float
+
+    :returns: tuple `(inmates, errors)` where
+
+        - :py:data:`inmates` -- inmates matching search parameters.
+        - :py:data:`errors` -- errors encountered while searching.
+
+    """
 
     if jurisdictions is None:
         jurisdictions = PROVIDERS.keys()
@@ -58,7 +75,28 @@ def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
 
 @aggregate_results
 def query_by_name(first, last, jurisdictions=None, timeout=None):
-    """Query jurisdictions with an inmate name"""
+    """Query jurisdictions with an inmate name.
+
+    :param first_name: Inmate first name to search.
+    :type first_name: str
+
+    :param last_name: Inmate last name to search.
+    :type last_name: str
+
+    :param jurisdictions: List of jurisdictions to search.
+        If `None`, then all available jurisdictions are searched.
+
+    :type jurisdictions: None or iterable
+
+    :param timeout: Time in seconds to wait for HTTP requests to complete.
+    :type timeout: float
+
+    :returns: tuple `(inmates, errors)` where
+
+        - :py:data:`inmates` -- inmates matching search parameters.
+        - :py:data:`errors` -- errors encountered while searching.
+
+    """
 
     if jurisdictions is None:
         jurisdictions = PROVIDERS.keys()
