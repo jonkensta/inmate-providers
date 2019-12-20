@@ -1,5 +1,6 @@
 """IBP inmate search utility."""
 
+import asyncio
 import logging
 import functools
 
@@ -16,24 +17,34 @@ PROVIDERS = {
 }
 
 
-def aggregate_results(query_func):
+def run_synchronously_and_aggregate_results(query_func):
     """Aggregate the results of the query function together."""
 
     @functools.wraps(query_func)
     def inner(*args, **kwargs):
-        inmates, errors = [], []
 
-        for provider_inmates, provider_error in query_func(*args, **kwargs):
-            inmates.extend(provider_inmates)
-            errors.extend(provider_error)
+        inmates, errors = [], []
+        providers, results = asyncio.run(query_func(*args, **kwargs))
+        for provider, result in zip(providers, results):
+
+            if isinstance(result, Exception):
+                if isinstance(result, requests.exceptions.RequestException):
+                    class_ = result.__class__.__name__
+                    error = f"{provider} query returned {class_} request exception"
+                    LOGGER.error(error)
+                    errors.append(error)
+                else:
+                    raise result
+
+            inmates.extend(result)
 
         return inmates, errors
 
     return inner
 
 
-@aggregate_results
-def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
+@run_synchronously_and_aggregate_results
+async def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
     """Query jurisdictions with an inmate ID.
 
     :param id_: Numeric identifier of the inmate.
@@ -56,23 +67,20 @@ def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
     if jurisdictions is None:
         jurisdictions = PROVIDERS.keys()
 
-    for provider, module in (PROVIDERS[j] for j in jurisdictions):
-        try:
-            inmates = module.query_by_inmate_id(id_, timeout)
-            errors = []
+    loop = asyncio.get_event_loop()
 
-        except requests.exceptions.RequestException as exc:
-            inmates = []
-            class_name = exc.__class__.__name__
-            error = f"{provider} query returned {class_name} request exception"
-            errors = [error]
-            LOGGER.error(error)
+    def generate_futures():
+        for _, module in (PROVIDERS[j] for j in jurisdictions):
+            yield loop.run_in_executor(None, module.query_by_inmate_id, id_, timeout)
 
-        yield inmates, errors
+    providers = (PROVIDERS[j] for j in jurisdictions)
+    futures = list(generate_futures())
+    results = await asyncio.gather(*futures, return_exceptions=True)
+    return providers, results
 
 
-@aggregate_results
-def query_by_name(first, last, jurisdictions=None, timeout=None):
+@run_synchronously_and_aggregate_results
+async def query_by_name(first, last, jurisdictions=None, timeout=None):
     """Query jurisdictions with an inmate name.
 
     :param first_name: Inmate first name to search.
@@ -98,16 +106,13 @@ def query_by_name(first, last, jurisdictions=None, timeout=None):
     if jurisdictions is None:
         jurisdictions = PROVIDERS.keys()
 
-    for provider, module in (PROVIDERS[j] for j in jurisdictions):
-        try:
-            inmates = module.query_by_name(first, last, timeout)
-            errors = []
+    loop = asyncio.get_event_loop()
 
-        except requests.exceptions.RequestException as exc:
-            inmates = []
-            class_ = exc.__class__.__name__
-            error = f"{provider} query returned {class_} request exception"
-            errors = [error]
-            LOGGER.error(error)
+    def generate_futures():
+        for _, module in (PROVIDERS[j] for j in jurisdictions):
+            yield loop.run_in_executor(None, module.query_by_name, first, last, timeout)
 
-        yield inmates, errors
+    providers = (PROVIDERS[j] for j in jurisdictions)
+    futures = list(generate_futures())
+    results = await asyncio.gather(*futures, return_exceptions=True)
+    return providers, results
