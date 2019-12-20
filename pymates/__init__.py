@@ -7,14 +7,13 @@ The :py:mod:`pymates` module provides two functions for searching for Texas inma
 
 Because Texas inmates can be housed in both Federal and state-level institutions,
 these functions must search for inmates through the TDCJ and FBOP websites.
-The driving utility of this module is that it provides a common interface to both systems:
-Search parameters are given,
-both jurisdictions are searched, and
-matching Federal and state-level inmates are returned back.
-All of this is done without requiring the user to be concerned with the details.
+The driving utility of this module is that it provides a common interface to
+both systems: Search parameters are given, both jurisdictions are searched, and
+matching Federal and state-level inmates are returned back. All of this is
+done without requiring the user to be concerned with the details.
 
 """
 
 from .base import query_by_inmate_id, query_by_name
 
-__all__ = ['query_by_inmate_id', 'query_by_name']
+__all__ = ["query_by_inmate_id", "query_by_name"]

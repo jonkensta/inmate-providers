@@ -1,0 +1,5 @@
+set cc=88
+let g:ale_fixers = {'python': ['black']}
+let g:ale_linters = {'python': ['mypy', 'flake8', 'pylint', 'pydocstyle']}
+let g:ale_fix_on_save = 1
+let g:ycm_python_binary_path = 'python'

@@ -1,6 +1,4 @@
-"""
-FBOP inmate query implementation.
-"""
+"""FBOP inmate query implementation."""
 
 import json
 import logging
@@ -8,23 +6,36 @@ from datetime import date, datetime
 
 import requests
 
-LOGGER = logging.getLogger('PROVIDERS.FBOP')
+LOGGER = logging.getLogger("PROVIDERS.FBOP")
 
 URL = "https://www.bop.gov/PublicInfo/execute/inmateloc"
 
 TEXAS_UNITS = {
-    'BAS', 'BML', 'BMM', 'BMP', 'BSC', 'BIG', 'BRY', 'CRW', 'EDN',
-    'FTW', 'DAL', 'HOU', 'LAT', 'REE', 'RVS', 'SEA', 'TEX', 'TRV',
+    "BAS",
+    "BML",
+    "BMM",
+    "BMP",
+    "BSC",
+    "BIG",
+    "BRY",
+    "CRW",
+    "EDN",
+    "FTW",
+    "DAL",
+    "HOU",
+    "LAT",
+    "REE",
+    "RVS",
+    "SEA",
+    "TEX",
+    "TRV",
 }
 
-SPECIAL_UNITS = {'TEMP RELEASE', 'IN TRANSIT'}
+SPECIAL_UNITS = {"TEMP RELEASE", "IN TRANSIT"}
 
 
 def query_by_name(first, last, timeout=None):
-    """
-    Query the FBOP database with an inmate name.
-    """
-
+    """Query the FBOP database with an inmate name."""
     LOGGER.debug("Querying with name %s, %s", last, first)
     matches = _query_helper(nameFirst=first, nameLast=last, timeout=timeout)
 
@@ -37,10 +48,7 @@ def query_by_name(first, last, timeout=None):
 
 
 def query_by_inmate_id(inmate_id, timeout=None):
-    """
-    Query the FBOP database with an inmate ID.
-    """
-
+    """Query the FBOP database with an inmate ID."""
     try:
         inmate_id = format_inmate_id(inmate_id)
     except ValueError as exc:
@@ -63,38 +71,32 @@ def query_by_inmate_id(inmate_id, timeout=None):
 
 
 def format_inmate_id(inmate_id):
-    """
-    Helper for formatting FBOP inmate IDs.
-    """
-
+    """Helper for formatting FBOP inmate IDs."""
     try:
-        inmate_id = int(str(inmate_id).replace('-', ''))
+        inmate_id = int(str(inmate_id).replace("-", ""))
     except ValueError:
         raise ValueError("inmate ID must be a number (dashes are okay)")
 
-    inmate_id = '{:08d}'.format(inmate_id)
+    inmate_id = "{:08d}".format(inmate_id)
 
     if len(inmate_id) != 8:
         raise ValueError("inmate ID must be less than 8 digits")
 
-    return inmate_id[0:5] + '-' + inmate_id[5:8]
+    return inmate_id[0:5] + "-" + inmate_id[5:8]
 
 
 def _query_helper(timeout=None, **kwargs):
-    """
-    Private helper for querying FBOP.
-    """
-
+    """Private helper for querying FBOP."""
     params = {
-        'age': '',
-        'inmateNum': '',
-        'nameFirst': '',
-        'nameLast': '',
-        'nameMiddle': '',
-        'output': 'json',
-        'race': '',
-        'sex': '',
-        'todo': 'query',
+        "age": "",
+        "inmateNum": "",
+        "nameFirst": "",
+        "nameLast": "",
+        "nameMiddle": "",
+        "output": "json",
+        "race": "",
+        "sex": "",
+        "todo": "query",
     }
     params.update(kwargs)
 
@@ -108,7 +110,7 @@ def _query_helper(timeout=None, **kwargs):
         LOGGER.error("Query returned %s request exception", exc_class_name)
 
     try:
-        data = json.loads(response.text)['InmateLocator']
+        data = json.loads(response.text)["InmateLocator"]
     except KeyError:
         return []
 
@@ -118,20 +120,17 @@ def _query_helper(timeout=None, **kwargs):
     inmates = list(inmates)
 
     for inmate in inmates:
-        last, first = inmate['last_name'], inmate['first_name']
-        id_ = inmate['id']
+        last, first = inmate["last_name"], inmate["first_name"]
+        id_ = inmate["id"]
         LOGGER.debug("%s, %s #%s: MATCHES", last, first, id_)
 
     return inmates
 
 
 def _has_not_been_released(inmate):
-    """
-    Private helper for checking if an inmate has been released.
-    """
-
+    """Private helper for checking if an inmate has been released."""
     try:
-        released = date.today() >= inmate['release']
+        released = date.today() >= inmate["release"]
     except TypeError:
         # release can be a string for life sentence, etc
         released = False
@@ -140,45 +139,39 @@ def _has_not_been_released(inmate):
 
 
 def _is_in_texas(inmate):
-    """
-    Private helper for checking if an inmate is in Texas.
-    """
-
-    return inmate['unit'] in set.union(TEXAS_UNITS, SPECIAL_UNITS)
+    """Private helper for checking if an inmate is in Texas."""
+    return inmate["unit"] in set.union(TEXAS_UNITS, SPECIAL_UNITS)
 
 
 def _data_to_inmate(entry):
-    """
-    Private helper for formatting the FBOP JSON output.
-    """
-
+    """Private helper for formatting the FBOP JSON output."""
     inmate = dict()
 
-    inmate['id'] = entry['inmateNum']
-    inmate['jurisdiction'] = 'Federal'
+    inmate["id"] = entry["inmateNum"]
+    inmate["jurisdiction"] = "Federal"
 
-    inmate['first_name'] = entry['nameFirst']
-    inmate['last_name'] = entry['nameLast']
+    inmate["first_name"] = entry["nameFirst"]
+    inmate["last_name"] = entry["nameLast"]
 
-    inmate['unit'] = entry['faclCode'] or None
+    inmate["unit"] = entry["faclCode"] or None
 
-    inmate['race'] = entry.get('race')
-    inmate['sex'] = entry.get('sex')
-    inmate['url'] = None
+    inmate["race"] = entry.get("race")
+    inmate["sex"] = entry.get("sex")
+    inmate["url"] = None
 
     def parse_date(datestr):
-        """Parse an FBOP date"""
+        """Parse an FBOP date."""
         return datetime.strptime(datestr, "%m/%d/%Y").date()
 
     try:
-        release = parse_date(entry['actRelDate'])
+        release = parse_date(entry["actRelDate"])
     except ValueError:
         try:
-            release = parse_date(entry['projRelDate'])
+            release = parse_date(entry["projRelDate"])
         except ValueError:
-            release = entry['projRelDate']
+            release = entry["projRelDate"]
 
-    inmate['release'] = release
-    inmate['datetime_fetched'] = datetime.now()
+    inmate["release"] = release
+    inmate["datetime_fetched"] = datetime.now()
 
     return inmate

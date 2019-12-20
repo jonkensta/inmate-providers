@@ -1,5 +1,4 @@
-"""IBP inmate search utility.
-"""
+"""IBP inmate search utility."""
 
 import logging
 import functools
@@ -9,11 +8,11 @@ import requests
 from . import fbop
 from . import tdcj
 
-LOGGER = logging.getLogger('PROVIDERS')
+LOGGER = logging.getLogger("PROVIDERS")
 
 PROVIDERS = {
-    'Texas':  ('TDCJ', tdcj),
-    'Federal': ('FBOP', fbop),
+    "Texas": ("TDCJ", tdcj),
+    "Federal": ("FBOP", fbop),
 }
 
 
@@ -54,7 +53,6 @@ def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
         - :py:data:`errors` -- errors encountered while searching.
 
     """
-
     if jurisdictions is None:
         jurisdictions = PROVIDERS.keys()
 
@@ -97,7 +95,6 @@ def query_by_name(first, last, jurisdictions=None, timeout=None):
         - :py:data:`errors` -- errors encountered while searching.
 
     """
-
     if jurisdictions is None:
         jurisdictions = PROVIDERS.keys()
 
