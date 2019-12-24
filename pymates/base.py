@@ -17,14 +17,14 @@ PROVIDERS = {
 }
 
 
-def run_synchronously_and_aggregate_results(query_func):
+def aggregate_results(query_func):
     """Aggregate the results of the query function together."""
 
     @functools.wraps(query_func)
     def inner(*args, **kwargs):
 
         inmates, errors = [], []
-        providers, results = asyncio.run(query_func(*args, **kwargs))
+        providers, results = query_func(*args, **kwargs)
         for provider, result in zip(providers, results):
 
             if isinstance(result, Exception):
@@ -43,8 +43,8 @@ def run_synchronously_and_aggregate_results(query_func):
     return inner
 
 
-@run_synchronously_and_aggregate_results
-async def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
+@aggregate_results
+def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
     """Query jurisdictions with an inmate ID.
 
     :param id_: Numeric identifier of the inmate.
@@ -67,20 +67,28 @@ async def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
     if jurisdictions is None:
         jurisdictions = PROVIDERS.keys()
 
-    loop = asyncio.get_event_loop()
+    providers = [PROVIDERS[j] for j in jurisdictions]
 
-    def generate_futures():
-        for _, module in (PROVIDERS[j] for j in jurisdictions):
-            yield loop.run_in_executor(None, module.query_by_inmate_id, id_, timeout)
+    async def async_helper():
+        loop = asyncio.get_event_loop()
 
-    providers = (PROVIDERS[j] for j in jurisdictions)
-    futures = list(generate_futures())
-    results = await asyncio.gather(*futures, return_exceptions=True)
+        def generate_futures():
+            for _, module in providers:
+                yield loop.run_in_executor(
+                    None, module.query_by_inmate_id, id_, timeout
+                )
+
+        futures = list(generate_futures())
+        results = await asyncio.gather(*futures, return_exceptions=True)
+
+        return results
+
+    results = asyncio.run(async_helper())
     return providers, results
 
 
-@run_synchronously_and_aggregate_results
-async def query_by_name(first, last, jurisdictions=None, timeout=None):
+@aggregate_results
+def query_by_name(first, last, jurisdictions=None, timeout=None):
     """Query jurisdictions with an inmate name.
 
     :param first_name: Inmate first name to search.
@@ -106,13 +114,21 @@ async def query_by_name(first, last, jurisdictions=None, timeout=None):
     if jurisdictions is None:
         jurisdictions = PROVIDERS.keys()
 
-    loop = asyncio.get_event_loop()
+    providers = [PROVIDERS[j] for j in jurisdictions]
 
-    def generate_futures():
-        for _, module in (PROVIDERS[j] for j in jurisdictions):
-            yield loop.run_in_executor(None, module.query_by_name, first, last, timeout)
+    async def async_helper():
+        loop = asyncio.get_event_loop()
 
-    providers = (PROVIDERS[j] for j in jurisdictions)
-    futures = list(generate_futures())
-    results = await asyncio.gather(*futures, return_exceptions=True)
+        def generate_futures():
+            for _, module in providers:
+                yield loop.run_in_executor(
+                    None, module.query_by_name, first, last, timeout
+                )
+
+        futures = list(generate_futures())
+        results = await asyncio.gather(*futures, return_exceptions=True)
+
+        return results
+
+    results = asyncio.run(async_helper())
     return providers, results
