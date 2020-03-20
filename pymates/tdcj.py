@@ -2,9 +2,10 @@
 
 import logging
 from datetime import datetime
-from urllib.parse import urljoin
 
-import requests
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from bs4 import BeautifulSoup
 from nameparser import HumanName
@@ -69,34 +70,41 @@ def _query_helper(timeout=None, **kwargs):
         "firstName": "",
     }
     params.update(kwargs)
+    params = urllib.parse.urlencode(params).encode("ascii")
 
-    with requests.Session() as session:
-        url = urljoin(BASE_URL, SEARCH_PATH)
-        response = session.post(url, params=params, timeout=timeout)
+    url = urllib.parse.urljoin(BASE_URL, SEARCH_PATH)
 
-        try:
-            response.raise_for_status()
-        except requests.exceptions.RequestException as exc:
-            exc_class_name = exc.__class__.__name__
-            LOGGER.error("Query returned %s request exception", exc_class_name)
+    try:
+        response = urllib.request.urlopen(url, params, timeout)
+    except urllib.error.URLError as exc:
+        exc_class_name = exc.__class__.__name__
+        LOGGER.error("Query returned %s request exception", exc_class_name)
+        raise
 
-        soup = BeautifulSoup(response.text, "html.parser")
-
+    soup = BeautifulSoup(response.read(), "html.parser")
     table = soup.find("table", {"class": "tdcj_table"})
 
     if table is None:
         return []
 
-    rows = table.findAll("tr")
-    keys = [ele.text.strip() for ele in rows[0].findAll("th")]
+    for linebreak in table.find_all("br"):
+        linebreak.replace_with(" ")
+
+    rows = iter(table.findAll("tr"))
+
+    # First row contains nothing.
+    next(rows)
+
+    # Second row contains the keys.
+    keys = [ele.text.strip() for ele in next(rows).find_all("th")]
 
     def row_to_entry(row):
-        values = [ele.text.strip() for ele in row.findAll("td")]
+        values = [ele.text.strip() for ele in row.find_all("td")]
         entry = dict(zip(keys, values))
         entry["href"] = row.find("a").get("href")
         return entry
 
-    entries = map(row_to_entry, rows[1:])  # first row contains column names
+    entries = map(row_to_entry, rows)
     inmates = map(_entry_to_inmate, entries)
     inmates = list(inmates)
 
@@ -120,7 +128,7 @@ def _entry_to_inmate(entry):
     inmate["sex"] = entry.get("Gender", None)
 
     if "href" in entry:
-        inmate["url"] = urljoin(BASE_URL, entry["href"])
+        inmate["url"] = urllib.parse.urljoin(BASE_URL, entry["href"])
 
     else:
         inmate["url"] = None

@@ -4,7 +4,7 @@ import asyncio
 import logging
 import functools
 
-import requests
+import urllib.error
 
 from . import fbop
 from . import tdcj
@@ -25,18 +25,15 @@ def aggregate_results(query_func):
 
         inmates, errors = [], []
         providers, results = query_func(*args, **kwargs)
-        for provider, result in zip(providers, results):
+        for (provider, _), result in zip(providers, results):
 
             if isinstance(result, Exception):
-                if isinstance(result, requests.exceptions.RequestException):
-                    class_ = result.__class__.__name__
-                    error = f"{provider} query returned {class_} request exception"
-                    LOGGER.error(error)
-                    errors.append(error)
-                else:
-                    raise result
-
-            inmates.extend(result)
+                class_ = result.__class__.__name__
+                error = f"{provider} query returned {class_} request exception."
+                LOGGER.error(error)
+                errors.append(error)
+            else:
+                inmates.extend(result)
 
         return inmates, errors
 

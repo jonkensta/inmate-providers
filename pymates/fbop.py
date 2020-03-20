@@ -1,10 +1,9 @@
 """FBOP inmate query implementation."""
 
 import json
+import urllib
 import logging
 from datetime import date, datetime
-
-import requests
 
 LOGGER = logging.getLogger("PROVIDERS.FBOP")
 
@@ -52,7 +51,7 @@ def query_by_inmate_id(inmate_id, timeout=None):
     try:
         inmate_id = format_inmate_id(inmate_id)
     except ValueError as exc:
-        msg = "'{inmate_id}' is not a valid Federal inmate number"
+        msg = f"'{inmate_id}' is not a valid Federal inmate number"
         raise ValueError(msg) from exc
 
     LOGGER.debug("Querying with ID %s", inmate_id)
@@ -71,7 +70,7 @@ def query_by_inmate_id(inmate_id, timeout=None):
 
 
 def format_inmate_id(inmate_id):
-    """Helper for formatting FBOP inmate IDs."""
+    """Format FBOP inmate IDs."""
     try:
         inmate_id = int(str(inmate_id).replace("-", ""))
     except ValueError:
@@ -99,18 +98,17 @@ def _query_helper(timeout=None, **kwargs):
         "todo": "query",
     }
     params.update(kwargs)
-
-    response = requests.post(URL, params=params, timeout=timeout)
+    params = urllib.parse.urlencode(params).encode("ascii")
 
     try:
-        response.raise_for_status()
-
-    except requests.exceptions.RequestException as exc:
+        response = urllib.request.urlopen(URL, params, timeout)
+    except urllib.error.URLError as exc:
         exc_class_name = exc.__class__.__name__
         LOGGER.error("Query returned %s request exception", exc_class_name)
+        raise
 
     try:
-        data = json.loads(response.text)["InmateLocator"]
+        data = json.loads(response.read())["InmateLocator"]
     except KeyError:
         return []
 
