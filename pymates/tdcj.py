@@ -1,11 +1,12 @@
 """TDCJ inmate query implementation."""
 
 import logging
-from datetime import datetime
 
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 from nameparser import HumanName
