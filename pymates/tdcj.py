@@ -77,6 +77,7 @@ def _query_helper(timeout=None, **kwargs):
 
     try:
         response = urllib.request.urlopen(url, params, timeout)
+
     except urllib.error.URLError as exc:
         exc_class_name = exc.__class__.__name__
         LOGGER.error("Query returned %s request exception", exc_class_name)
