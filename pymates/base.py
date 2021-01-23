@@ -4,8 +4,6 @@ import asyncio
 import logging
 import functools
 
-import urllib.error
-
 from . import fbop
 from . import tdcj
 
