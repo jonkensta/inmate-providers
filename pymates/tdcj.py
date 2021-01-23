@@ -2,6 +2,8 @@
 
 import logging
 
+import ssl
+
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -76,7 +78,8 @@ def _query_helper(timeout=None, **kwargs):
     url = urllib.parse.urljoin(BASE_URL, SEARCH_PATH)
 
     try:
-        response = urllib.request.urlopen(url, params, timeout)
+        context = ssl.SSLContext()
+        response = urllib.request.urlopen(url, params, timeout, context=context)
 
     except urllib.error.URLError as exc:
         exc_class_name = exc.__class__.__name__
