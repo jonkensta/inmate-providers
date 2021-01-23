@@ -34,9 +34,9 @@ def query_by_inmate_id(inmate_id, timeout=None):
     """Query the TDCJ database with an inmate id."""
     try:
         inmate_id = "{:08d}".format(int(inmate_id))
-    except ValueError:
+    except ValueError as exc:
         msg = "{} is not a valid Texas inmate number".format(inmate_id)
-        raise ValueError(msg)
+        raise ValueError(msg) from exc
 
     LOGGER.debug("Querying with ID %s", inmate_id)
     matches = _query_helper(tdcj=inmate_id, timeout=timeout)

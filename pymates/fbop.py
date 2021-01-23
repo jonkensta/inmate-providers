@@ -73,8 +73,8 @@ def format_inmate_id(inmate_id):
     """Format FBOP inmate IDs."""
     try:
         inmate_id = int(str(inmate_id).replace("-", ""))
-    except ValueError:
-        raise ValueError("inmate ID must be a number (dashes are okay)")
+    except ValueError as exc:
+        raise ValueError("inmate ID must be a number (dashes are okay)") from exc
 
     inmate_id = "{:08d}".format(inmate_id)
 
