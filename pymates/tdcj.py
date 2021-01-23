@@ -54,7 +54,7 @@ def query_by_inmate_id(inmate_id, timeout=None):
 
 
 def format_inmate_id(inmate_id):
-    """Helper for formatting TDCJ inmate IDs."""
+    """Format a TDCJ inmate ID."""
     return "{:08d}".format(int(inmate_id))
 
 
