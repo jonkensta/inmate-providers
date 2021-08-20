@@ -1,8 +1,8 @@
 """TDCJ inmate query implementation."""
 
 import logging
-
 import ssl
+import typing
 
 import urllib.error
 import urllib.parse
@@ -10,8 +10,8 @@ import urllib.request
 
 from datetime import datetime
 
-from bs4 import BeautifulSoup
-from nameparser import HumanName
+from bs4 import BeautifulSoup  # type: ignore
+from nameparser import HumanName  # type: ignore
 
 LOGGER = logging.getLogger("PROVIDERS.TDCJ")
 
@@ -55,12 +55,14 @@ def query_by_inmate_id(inmate_id, timeout=None):
     return matches
 
 
-def format_inmate_id(inmate_id):
+def format_inmate_id(inmate_id: typing.Union[int, str]) -> str:
     """Format a TDCJ inmate ID."""
     return "{:08d}".format(int(inmate_id))
 
 
-def _query_helper(timeout=None, **kwargs):
+def _query_helper(  # pylint: disable=too-many-locals
+    timeout: typing.Optional[float] = None, **kwargs
+) -> typing.List[dict]:
     """Private helper for querying TDCJ."""
     params = {
         "btnSearch": "Search",
@@ -73,20 +75,22 @@ def _query_helper(timeout=None, **kwargs):
         "firstName": "",
     }
     params.update(kwargs)
-    params = urllib.parse.urlencode(params).encode("ascii")
+    request_params = urllib.parse.urlencode(params).encode("ascii")
 
     url = urllib.parse.urljoin(BASE_URL, SEARCH_PATH)
 
     try:
-        context = ssl.SSLContext()
-        response = urllib.request.urlopen(url, params, timeout, context=context)
+        with urllib.request.urlopen(
+            url, request_params, timeout, context=ssl.SSLContext()
+        ) as response:
+            response_data = response.read()
 
     except urllib.error.URLError as exc:
         exc_class_name = exc.__class__.__name__
         LOGGER.error("Query returned %s request exception", exc_class_name)
         raise
 
-    soup = BeautifulSoup(response.read(), "html.parser")
+    soup = BeautifulSoup(response_data, "html.parser")
     table = soup.find("table", {"class": "tdcj_table"})
 
     if table is None:
@@ -111,12 +115,11 @@ def _query_helper(timeout=None, **kwargs):
 
     entries = map(row_to_entry, rows)
     inmates = map(_entry_to_inmate, entries)
-    inmates = list(inmates)
 
-    return inmates
+    return list(inmates)
 
 
-def _entry_to_inmate(entry):
+def _entry_to_inmate(entry: dict) -> dict:
     """Convert TDCJ inmate entry to inmate dictionary."""
     inmate = dict()
 
