@@ -15,8 +15,8 @@ from nameparser import HumanName  # type: ignore
 
 LOGGER = logging.getLogger("PROVIDERS.TDCJ")
 
-BASE_URL = "https://offender.tdcj.texas.gov"
-SEARCH_PATH = "OffenderSearch/search.action"
+BASE_URL = "https://inmate.tdcj.texas.gov"
+SEARCH_PATH = "InmateSearch/search.action"
 
 
 def query_by_name(first, last, timeout=None):
