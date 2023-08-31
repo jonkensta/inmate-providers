@@ -26,8 +26,8 @@ def aggregate_results(query_func):
         for (provider, _), result in zip(providers, results):
 
             if isinstance(result, Exception):
-                class_name = result.__class__.__name__
-                error = f"{provider} query returned {class_name} request exception."
+                exc_name = result.__class__.__name__
+                error = f"{provider} query returned {exc_name}: '{result}'."
                 LOGGER.error(error)
                 errors.append(error)
             else:
