@@ -35,9 +35,9 @@ def query_by_name(first, last, timeout=None):
 def query_by_inmate_id(inmate_id, timeout=None):
     """Query the TDCJ database with an inmate id."""
     try:
-        inmate_id = "{:08d}".format(int(inmate_id))
+        inmate_id = format_inmate_id(inmate_id)
     except ValueError as exc:
-        msg = "{} is not a valid Texas inmate number".format(inmate_id)
+        msg = f"'{inmate_id}' is not a valid Texas inmate number"
         raise ValueError(msg) from exc
 
     LOGGER.debug("Querying with ID %s", inmate_id)
@@ -57,7 +57,8 @@ def query_by_inmate_id(inmate_id, timeout=None):
 
 def format_inmate_id(inmate_id: typing.Union[int, str]) -> str:
     """Format a TDCJ inmate ID."""
-    return "{:08d}".format(int(inmate_id))
+    inmate_id = int(inmate_id)
+    return f"{inmate_id:08d}"
 
 
 def _query_helper(  # pylint: disable=too-many-locals
@@ -121,7 +122,7 @@ def _query_helper(  # pylint: disable=too-many-locals
 
 def _entry_to_inmate(entry: dict) -> dict:
     """Convert TDCJ inmate entry to inmate dictionary."""
-    inmate = dict()
+    inmate = {}
 
     inmate["id"] = entry["TDCJ Number"]
     inmate["jurisdiction"] = "Texas"

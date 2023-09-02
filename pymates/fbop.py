@@ -74,9 +74,9 @@ def format_inmate_id(inmate_id):
     try:
         inmate_id = int(str(inmate_id).replace("-", ""))
     except ValueError as exc:
-        raise ValueError("inmate ID must be a number (dashes are okay)") from exc
+        raise ValueError("inmate ID must be a number") from exc
 
-    inmate_id = "{:08d}".format(inmate_id)
+    inmate_id = "{inmate_id:08d}"
 
     if len(inmate_id) != 8:
         raise ValueError("inmate ID must be less than 8 digits")
@@ -143,7 +143,7 @@ def _is_in_texas(inmate):
 
 def _data_to_inmate(entry):
     """Private helper for formatting the FBOP JSON output."""
-    inmate = dict()
+    inmate = {}
 
     inmate["id"] = entry["inmateNum"]
     inmate["jurisdiction"] = "Federal"
