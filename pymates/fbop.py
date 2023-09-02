@@ -1,9 +1,12 @@
 """FBOP inmate query implementation."""
 
-import json
-import urllib
+import typing
 import logging
-from datetime import date, datetime
+import datetime
+
+import aiohttp
+
+from .decorators import log_query_by_inmate_id, log_query_by_name
 
 LOGGER = logging.getLogger("PROVIDERS.FBOP")
 
@@ -33,50 +36,14 @@ TEXAS_UNITS = {
 SPECIAL_UNITS = {"TEMP RELEASE", "IN TRANSIT"}
 
 
-def query_by_name(first, last, timeout=None):
-    """Query the FBOP database with an inmate name."""
-    LOGGER.debug("Querying with name %s, %s", last, first)
-    matches = _query_helper(nameFirst=first, nameLast=last, timeout=timeout)
-
-    if not matches:
-        LOGGER.debug("No results were returned")
-        return []
-
-    LOGGER.debug("%d result(s) returned", len(matches))
-    return matches
-
-
-def query_by_inmate_id(inmate_id, timeout=None):
-    """Query the FBOP database with an inmate ID."""
-    try:
-        inmate_id = format_inmate_id(inmate_id)
-    except ValueError as exc:
-        msg = f"'{inmate_id}' is not a valid Federal inmate number"
-        raise ValueError(msg) from exc
-
-    LOGGER.debug("Querying with ID %s", inmate_id)
-    matches = _query_helper(inmateNum=inmate_id, timeout=timeout)
-
-    if not matches:
-        LOGGER.debug("No results were returned")
-        return []
-
-    if len(matches) > 1:
-        LOGGER.error("Multiple results were returned for an ID query")
-        return matches
-
-    LOGGER.debug("A single result was returned")
-    return matches
-
-
-def format_inmate_id(inmate_id):
+def format_inmate_id(inmate_id: typing.Union[str, int]) -> str:
     """Format FBOP inmate IDs."""
     try:
         inmate_id = int(str(inmate_id).replace("-", ""))
     except ValueError as exc:
         raise ValueError("inmate ID must be a number") from exc
 
-    inmate_id = "{inmate_id:08d}"
+    inmate_id = f"{inmate_id:08d}"
 
     if len(inmate_id) != 8:
         raise ValueError("inmate ID must be less than 8 digits")
@@ -84,92 +51,137 @@ def format_inmate_id(inmate_id):
     return inmate_id[0:5] + "-" + inmate_id[5:8]
 
 
-def _query_helper(timeout=None, **kwargs):
+class QueryResult(typing.TypedDict):
+    """Result of a FBOP query."""
+
+    id: str
+    jurisdiction: typing.Literal["Federal"]
+
+    first_name: str
+    last_name: str
+
+    unit: str
+
+    race: typing.Optional[str]
+    sex: typing.Optional[str]
+
+    url: typing.Literal[None]
+    release: typing.Optional[str | datetime.date]
+
+    datetime_fetched: datetime.datetime
+
+
+async def _query(
+    last_name: str = "",
+    first_name: str = "",
+    inmate_id: str = "",
+    timeout: typing.Optional[float] = None,
+) -> typing.List[QueryResult]:
     """Private helper for querying FBOP."""
+
     params = {
         "age": "",
-        "inmateNum": "",
-        "nameFirst": "",
-        "nameLast": "",
         "nameMiddle": "",
         "output": "json",
         "race": "",
         "sex": "",
         "todo": "query",
+        "nameLast": last_name,
+        "nameFirst": first_name,
+        "inmateNum": inmate_id,
     }
-    params.update(kwargs)
-    params = urllib.parse.urlencode(params).encode("ascii")
+
+    timeout = aiohttp.ClientTimeout(total=timeout)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(URL, params=params) as response:
+            json = await response.json()
 
     try:
-        response = urllib.request.urlopen(URL, params, timeout)
-    except urllib.error.URLError as exc:
-        exc_class_name = exc.__class__.__name__
-        LOGGER.error("Query returned %s request exception", exc_class_name)
-        raise
-
-    try:
-        data = json.loads(response.read())["InmateLocator"]
+        data = json["InmateLocator"]
     except KeyError:
         return []
 
-    inmates = map(_data_to_inmate, data)
-    inmates = filter(_is_in_texas, inmates)
-    inmates = filter(_has_not_been_released, inmates)
-    inmates = list(inmates)
+    def data_to_inmate(entry):
+        inmate = {}
 
-    for inmate in inmates:
-        last, first = inmate["last_name"], inmate["first_name"]
-        id_ = inmate["id"]
-        LOGGER.debug("%s, %s #%s: MATCHES", last, first, id_)
+        inmate["id"] = entry["inmateNum"]
+        inmate["jurisdiction"] = "Federal"
 
-    return inmates
+        inmate["first_name"] = entry["nameFirst"]
+        inmate["last_name"] = entry["nameLast"]
 
+        inmate["unit"] = entry["faclCode"] or None
 
-def _has_not_been_released(inmate):
-    """Private helper for checking if an inmate has been released."""
-    try:
-        released = date.today() >= inmate["release"]
-    except TypeError:
-        # release can be a string for life sentence, etc
-        released = False
+        inmate["race"] = entry.get("race")
+        inmate["sex"] = entry.get("sex")
+        inmate["url"] = None
 
-    return not released
+        def parse_date(datestr):
+            return datetime.datetime.strptime(datestr, "%m/%d/%Y").date()
 
-
-def _is_in_texas(inmate):
-    """Private helper for checking if an inmate is in Texas."""
-    return inmate["unit"] in set.union(TEXAS_UNITS, SPECIAL_UNITS)
-
-
-def _data_to_inmate(entry):
-    """Private helper for formatting the FBOP JSON output."""
-    inmate = {}
-
-    inmate["id"] = entry["inmateNum"]
-    inmate["jurisdiction"] = "Federal"
-
-    inmate["first_name"] = entry["nameFirst"]
-    inmate["last_name"] = entry["nameLast"]
-
-    inmate["unit"] = entry["faclCode"] or None
-
-    inmate["race"] = entry.get("race")
-    inmate["sex"] = entry.get("sex")
-    inmate["url"] = None
-
-    def parse_date(datestr):
-        """Parse an FBOP date."""
-        return datetime.strptime(datestr, "%m/%d/%Y").date()
-
-    try:
-        release = parse_date(entry["actRelDate"])
-    except ValueError:
         try:
-            release = parse_date(entry["projRelDate"])
+            actual_release = parse_date(entry["actRelDate"])
         except ValueError:
-            release = entry["projRelDate"]
+            LOGGER.debug("Failed to parse actual release date '%s", entry["actRelDate"])
+            actual_release = None
 
-    inmate["release"] = release
-    inmate["datetime_fetched"] = datetime.now()
+        try:
+            projected_release = parse_date(entry["projRelDate"])
+        except ValueError:
+            LOGGER.debug(
+                "Failed to parse projected release date '%s", entry["projRelDate"]
+            )
+            projected_release = None
 
-    return inmate
+        inmate["release"] = (
+            actual_release
+            or projected_release
+            or entry["projRelDate"]
+            or entry["actRelDate"]
+            or None
+        )
+
+        if inmate["release"] is None:
+            LOGGER.debug("Failed to retrieve any release date.")
+
+        inmate["datetime_fetched"] = datetime.datetime.now()
+
+        return inmate
+
+    inmates = map(data_to_inmate, data)
+
+    def is_in_texas(inmate):
+        return inmate["unit"] in set.union(TEXAS_UNITS, SPECIAL_UNITS)
+
+    inmates = filter(is_in_texas, inmates)
+
+    def has_not_been_released(inmate):
+        try:
+            released = datetime.date.today() >= inmate["release"]
+        except TypeError:
+            # release can be a string for life sentence, etc
+            released = False
+
+        return not released
+
+    inmates = filter(has_not_been_released, inmates)
+
+    return list(inmates)
+
+
+@log_query_by_name(LOGGER)
+async def query_by_name(first, last, **kwargs):
+    """Query the FBOP database with an inmate name."""
+    return await _query(first_name=first, last_name=last, **kwargs)
+
+
+@log_query_by_inmate_id(LOGGER)
+async def query_by_inmate_id(inmate_id: str | int, **kwargs):
+    """Query the FBOP database with an inmate id."""
+    try:
+        inmate_id = format_inmate_id(inmate_id)
+    except ValueError as exc:
+        msg = f"'{inmate_id}' is not a valid Texas inmate number"
+        raise ValueError(msg) from exc
+
+    return await _query(inmate_id=inmate_id, **kwargs)

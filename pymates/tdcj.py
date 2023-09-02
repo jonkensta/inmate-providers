@@ -1,58 +1,22 @@
 """TDCJ inmate query implementation."""
 
+import datetime
 import logging
-import ssl
 import typing
+from urllib.parse import urljoin
 
-import urllib.error
-import urllib.parse
-import urllib.request
-
-from datetime import datetime
-
+import aiohttp
 from bs4 import BeautifulSoup  # type: ignore
 from nameparser import HumanName  # type: ignore
+
+from .decorators import log_query_by_name, log_query_by_inmate_id
+
 
 LOGGER = logging.getLogger("PROVIDERS.TDCJ")
 
 BASE_URL = "https://inmate.tdcj.texas.gov"
 SEARCH_PATH = "InmateSearch/search.action"
-
-
-def query_by_name(first, last, timeout=None):
-    """Query the TDCJ database with an inmate name."""
-    LOGGER.debug("Querying with name %s, %s", last, first)
-    matches = _query_helper(firstName=first, lastName=last, timeout=timeout)
-
-    if not matches:
-        LOGGER.debug("No results were returned")
-        return []
-
-    LOGGER.debug("%d result(s) returned", len(matches))
-    return matches
-
-
-def query_by_inmate_id(inmate_id, timeout=None):
-    """Query the TDCJ database with an inmate id."""
-    try:
-        inmate_id = format_inmate_id(inmate_id)
-    except ValueError as exc:
-        msg = f"'{inmate_id}' is not a valid Texas inmate number"
-        raise ValueError(msg) from exc
-
-    LOGGER.debug("Querying with ID %s", inmate_id)
-    matches = _query_helper(tdcj=inmate_id, timeout=timeout)
-
-    if not matches:
-        LOGGER.debug("No results returned")
-        return []
-
-    if len(matches) > 1:
-        LOGGER.error("Multiple results were returned for an ID query")
-        return matches
-
-    LOGGER.debug("A single result was returned")
-    return matches
+SEARCH_URL = urljoin(BASE_URL, SEARCH_PATH)
 
 
 def format_inmate_id(inmate_id: typing.Union[int, str]) -> str:
@@ -61,37 +25,51 @@ def format_inmate_id(inmate_id: typing.Union[int, str]) -> str:
     return f"{inmate_id:08d}"
 
 
-def _query_helper(  # pylint: disable=too-many-locals
-    timeout: typing.Optional[float] = None, **kwargs
-) -> typing.List[dict]:
+class QueryResult(typing.TypedDict):
+    """Result of a TDCJ query."""
+
+    id: str
+    jurisdiction: typing.Literal["Texas"]
+
+    first_name: str
+    last_name: str
+
+    unit: str
+
+    race: typing.Optional[str]
+    sex: typing.Optional[str]
+
+    url: str
+    release: typing.Optional[str | datetime.date]
+
+    datetime_fetched: datetime.datetime
+
+
+async def _query(  # pylint: disable=too-many-locals
+    last_name: str = "",
+    first_name: str = "",
+    inmate_id: str = "",
+    timeout: typing.Optional[float] = None,
+) -> typing.List[QueryResult]:
     """Private helper for querying TDCJ."""
-    params = {
+
+    data = {
         "btnSearch": "Search",
         "gender": "ALL",
         "page": "index",
         "race": "ALL",
-        "tdcj": "",
         "sid": "",
-        "lastName": "",
-        "firstName": "",
+        "tdcj": inmate_id,
+        "lastName": last_name,
+        "firstName": first_name,
     }
-    params.update(kwargs)
-    request_params = urllib.parse.urlencode(params).encode("ascii")
 
-    url = urllib.parse.urljoin(BASE_URL, SEARCH_PATH)
+    timeout = aiohttp.ClientTimeout(total=timeout)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.post(SEARCH_URL, data=data) as response:
+            html = await response.text()
 
-    try:
-        with urllib.request.urlopen(
-            url, request_params, timeout, context=ssl.SSLContext()
-        ) as response:
-            response_data = response.read()
-
-    except urllib.error.URLError as exc:
-        exc_class_name = exc.__class__.__name__
-        LOGGER.error("Query returned %s request exception", exc_class_name)
-        raise
-
-    soup = BeautifulSoup(response_data, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", {"class": "tdcj_table"})
 
     if table is None:
@@ -103,7 +81,10 @@ def _query_helper(  # pylint: disable=too-many-locals
     rows = iter(table.findAll("tr"))
 
     # First row contains nothing.
-    next(rows)
+    try:
+        next(rows)
+    except StopIteration:
+        return []
 
     # Second row contains the keys.
     keys = [ele.text.strip() for ele in next(rows).find_all("th")]
@@ -115,46 +96,59 @@ def _query_helper(  # pylint: disable=too-many-locals
         return entry
 
     entries = map(row_to_entry, rows)
-    inmates = map(_entry_to_inmate, entries)
 
-    return list(inmates)
+    def entry_to_inmate(entry: dict) -> dict:
+        """Convert TDCJ inmate entry to inmate dictionary."""
+        inmate = {}
 
+        inmate["id"] = entry["TDCJ Number"]
+        inmate["jurisdiction"] = "Texas"
 
-def _entry_to_inmate(entry: dict) -> dict:
-    """Convert TDCJ inmate entry to inmate dictionary."""
-    inmate = {}
+        name = HumanName(entry.get("Name", ""))
+        inmate["first_name"] = name.first
+        inmate["last_name"] = name.last
 
-    inmate["id"] = entry["TDCJ Number"]
-    inmate["jurisdiction"] = "Texas"
+        inmate["unit"] = entry["Unit of Assignment"]
 
-    name = HumanName(entry.get("Name", ""))
-    inmate["first_name"] = name.first
-    inmate["last_name"] = name.last
+        inmate["race"] = entry.get("Race", None)
+        inmate["sex"] = entry.get("Gender", None)
 
-    inmate["unit"] = entry["Unit of Assignment"]
+        def build_url(href):
+            return urljoin(BASE_URL, href)
 
-    inmate["race"] = entry.get("Race", None)
-    inmate["sex"] = entry.get("Gender", None)
+        inmate["url"] = build_url(entry["href"]) if "href" in entry else None
 
-    if "href" in entry:
-        inmate["url"] = urllib.parse.urljoin(BASE_URL, entry["href"])
+        def parse_release_date(release):
+            return datetime.datetime.strptime(release, "%Y-%m-%d").date()
 
-    else:
-        inmate["url"] = None
+        release = entry["Projected Release Date"]
 
-    release_string = entry["Projected Release Date"]
-    try:
-        release = datetime.strptime(release_string, "%Y-%m-%d").date()
-    except ValueError:
-        release = release_string
-        LOGGER.debug("Failed to convert release date to date: %s", release)
-    finally:
+        try:
+            release = parse_release_date(release)
+        except ValueError:
+            LOGGER.debug("Failed to parse release date '%s'", release)
+
         inmate["release"] = release
+        inmate["datetime_fetched"] = datetime.datetime.now()
 
-    inmate["datetime_fetched"] = datetime.now()
+        return inmate
 
-    LOGGER.debug(
-        "%s, %s #%s: MATCHES", inmate["last_name"], inmate["first_name"], inmate["id"]
-    )
+    return list(map(entry_to_inmate, entries))
 
-    return inmate
+
+@log_query_by_name(LOGGER)
+async def query_by_name(first, last, **kwargs):
+    """Query the TDCJ database with an inmate name."""
+    return await _query(first_name=first, last_name=last, **kwargs)
+
+
+@log_query_by_inmate_id(LOGGER)
+async def query_by_inmate_id(inmate_id: str | int, **kwargs):
+    """Query the TDCJ database with an inmate id."""
+    try:
+        inmate_id = format_inmate_id(inmate_id)
+    except ValueError as exc:
+        msg = f"'{inmate_id}' is not a valid Texas inmate number"
+        raise ValueError(msg) from exc
+
+    return await _query(inmate_id=inmate_id, **kwargs)

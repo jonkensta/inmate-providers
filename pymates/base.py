@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import functools
+import typing
 
 from . import fbop
 from . import tdcj
@@ -10,45 +11,90 @@ from . import tdcj
 LOGGER = logging.getLogger("PROVIDERS")
 
 PROVIDERS = {
-    "Texas": ("TDCJ", tdcj),
-    "Federal": ("FBOP", fbop),
+    "Texas": tdcj,
+    "Federal": fbop,
 }
 
+LOGGERS = {
+    "Texas": tdcj.LOGGER,
+    "Federal": fbop.LOGGER,
+}
 
-def aggregate_results(query_func):
-    """Aggregate the results of the query function together."""
+Jurisdiction = typing.Literal["Texas", "Federal"]
 
-    @functools.wraps(query_func)
-    def inner(*args, **kwargs):
 
-        inmates, errors = [], []
-        providers, results = query_func(*args, **kwargs)
-        for (provider, _), result in zip(providers, results):
+def preprocess_kwargs(wrapped):
+    """Preprocess the keyword args for a query function."""
 
-            if isinstance(result, Exception):
-                exc_name = result.__class__.__name__
-                error = f"{provider} query returned {exc_name}: '{result}'."
-                LOGGER.error(error)
-                errors.append(error)
-            else:
-                inmates.extend(result)
+    @functools.wraps(wrapped)
+    async def wrapper(*args, jurisdictions=None, timeout=None):
+        if jurisdictions is None:
+            jurisdictions = PROVIDERS.keys()
+
+        jurisdictions = list(set(jurisdictions))
+        for jurisdiction in jurisdictions:
+            if jurisdiction not in PROVIDERS:
+                raise ValueError(f"Invalid jurisdiction '{jurisdiction}' given.")
+
+        kwargs = {
+            "jurisdictions": jurisdictions,
+        }
+
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+
+        return await wrapped(*args, **kwargs)
+
+    return wrapper
+
+
+def postprocess_results(wrapped):
+    """Postprocess the results of a query function."""
+
+    @functools.wraps(wrapped)
+    async def wrapper(*args, **kwargs):
+        jurisdictions, aws = wrapped(*args, **kwargs)
+        results = await asyncio.gather(*aws, return_exceptions=True)
+
+        def is_exception(result) -> bool:
+            return isinstance(result, Exception)
+
+        errors = list(filter(is_exception, results))
+
+        for jurisdiction, result in zip(jurisdictions, results):
+            if is_exception(result):
+                class_name = result.__class__.__name__
+                error = f"Query returned '{class_name}: {result}'."
+                LOGGERS[jurisdiction].error(error)
+
+        def is_not_exception(result) -> bool:
+            return not is_exception(result)
+
+        inmates = [
+            item for sublist in filter(is_not_exception, results) for item in sublist
+        ]
 
         return inmates, errors
 
-    return inner
+    return wrapper
 
 
-@aggregate_results
-def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
+@preprocess_kwargs
+@postprocess_results
+def query_by_inmate_id(
+    inmate_id: str | int,
+    jurisdictions: typing.Optional[typing.Iterable[Jurisdiction]] = None,
+    timeout: typing.Optional[float] = 10.0,
+):
     """Query jurisdictions with an inmate ID.
 
-    :param id_: Numeric identifier of the inmate.
-    :type id_: int or str
+    :param inmate_id: Numeric identifier of the inmate.
+    :type inmate_id: int or str
 
     :param jurisdictions: List of jurisdictions to search.
         If `None`, then all available jurisdictions are searched.
 
-    :type jurisdictions: None or iterable
+    :type jurisdictions: None or iterable of strings
 
     :param timeout: Time in seconds to wait for HTTP requests to complete.
     :type timeout: float
@@ -59,31 +105,21 @@ def query_by_inmate_id(id_, jurisdictions=None, timeout=None):
         - :py:data:`errors` -- errors encountered while searching.
 
     """
-    if jurisdictions is None:
-        jurisdictions = PROVIDERS.keys()
-
-    providers = [PROVIDERS[j] for j in jurisdictions]
-
-    async def async_helper():
-        loop = asyncio.get_event_loop()
-
-        def generate_futures():
-            for _, module in providers:
-                yield loop.run_in_executor(
-                    None, module.query_by_inmate_id, id_, timeout
-                )
-
-        futures = list(generate_futures())
-        results = await asyncio.gather(*futures, return_exceptions=True)
-
-        return results
-
-    results = asyncio.run(async_helper())
-    return providers, results
+    aws = [
+        PROVIDERS[j].query_by_inmate_id(inmate_id=inmate_id, timeout=timeout)
+        for j in jurisdictions
+    ]
+    return jurisdictions, aws
 
 
-@aggregate_results
-def query_by_name(first, last, jurisdictions=None, timeout=None):
+@preprocess_kwargs
+@postprocess_results
+def query_by_name(
+    first: str,
+    last: str,
+    jurisdictions: typing.Optional[typing.Iterable[Jurisdiction]] = None,
+    timeout: typing.Optional[float] = 10.0,
+):
     """Query jurisdictions with an inmate name.
 
     :param first_name: Inmate first name to search.
@@ -95,7 +131,7 @@ def query_by_name(first, last, jurisdictions=None, timeout=None):
     :param jurisdictions: List of jurisdictions to search.
         If `None`, then all available jurisdictions are searched.
 
-    :type jurisdictions: None or iterable
+    :type jurisdictions: None or iterable of strings
 
     :param timeout: Time in seconds to wait for HTTP requests to complete.
     :type timeout: float
@@ -106,24 +142,8 @@ def query_by_name(first, last, jurisdictions=None, timeout=None):
         - :py:data:`errors` -- errors encountered while searching.
 
     """
-    if jurisdictions is None:
-        jurisdictions = PROVIDERS.keys()
-
-    providers = [PROVIDERS[j] for j in jurisdictions]
-
-    async def async_helper():
-        loop = asyncio.get_event_loop()
-
-        def generate_futures():
-            for _, module in providers:
-                yield loop.run_in_executor(
-                    None, module.query_by_name, first, last, timeout
-                )
-
-        futures = list(generate_futures())
-        results = await asyncio.gather(*futures, return_exceptions=True)
-
-        return results
-
-    results = asyncio.run(async_helper())
-    return providers, results
+    aws = [
+        PROVIDERS[j].query_by_name(first=first, last=last, timeout=timeout)
+        for j in jurisdictions
+    ]
+    return jurisdictions, aws
