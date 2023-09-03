@@ -5,7 +5,6 @@ import logging
 import datetime
 
 import aiohttp
-from mypy_extensions import TypedDict
 
 from .decorators import log_query_by_inmate_id, log_query_by_name
 
@@ -52,7 +51,7 @@ def format_inmate_id(inmate_id: typing.Union[str, int]) -> str:
     return inmate_id[0:5] + "-" + inmate_id[5:8]
 
 
-class QueryResult(TypedDict):
+class QueryResult(typing.TypedDict):
     """Result of a FBOP query."""
 
     id: str

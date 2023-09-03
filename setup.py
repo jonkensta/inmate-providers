@@ -19,5 +19,5 @@ setup(
     url='https://github.com/jonkensta/inmate-providers',
     license=LICENSE,
     packages=find_packages(),
-    install_requires=['bs4', 'mypy', 'aiohttp', 'nameparser'],
+    install_requires=['bs4', 'aiohttp', 'nameparser'],
 )

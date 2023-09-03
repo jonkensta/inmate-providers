@@ -6,7 +6,6 @@ import typing
 from urllib.parse import urljoin
 
 import aiohttp
-from mypy_extensions import TypedDict
 from bs4 import BeautifulSoup, Tag
 from nameparser import HumanName
 
@@ -26,7 +25,7 @@ def format_inmate_id(inmate_id: typing.Union[int, str]) -> str:
     return f"{inmate_id:08d}"
 
 
-class QueryResult(TypedDict):
+class QueryResult(typing.TypedDict):
     """Result of a TDCJ query."""
 
     id: str
