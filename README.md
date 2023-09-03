@@ -26,15 +26,15 @@ import pymates
 
 ### Querying with a ID:
 
-An example of querying with a numeric ID '88888888'::
+An example of querying with a numeric ID '88888888':
 
 ```python
-inmates, errors = await pymates.query_by_inmate_id('88888888')
+inmates, errors = await pymates.query_by_inmate_id("88888888")
 ```
 
 ### Query with a name:
 
-An example of querying with a name, say "John Smith"::
+An example of querying with a name, say "John Smith":
 ```python
 inmates, errors = await pymates.query_by_name("John", "Smith")
 ```
