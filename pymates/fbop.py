@@ -76,7 +76,7 @@ async def _query(
     first_name: str = "",
     inmate_id: str = "",
     timeout: typing.Optional[float] = None,
-) -> typing.List[QueryResult]:
+) -> list[QueryResult]:
     """Private helper for querying FBOP."""
 
     params = {
@@ -91,8 +91,8 @@ async def _query(
         "inmateNum": inmate_id,
     }
 
-    timeout = aiohttp.ClientTimeout(total=timeout)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    client_timeout = aiohttp.ClientTimeout(total=timeout)
+    async with aiohttp.ClientSession(timeout=client_timeout) as session:
         async with session.get(URL, params=params) as response:
             json = await response.json()
 
@@ -102,20 +102,6 @@ async def _query(
         return []
 
     def data_to_inmate(entry):
-        inmate = {}
-
-        inmate["id"] = entry["inmateNum"]
-        inmate["jurisdiction"] = "Federal"
-
-        inmate["first_name"] = entry["nameFirst"]
-        inmate["last_name"] = entry["nameLast"]
-
-        inmate["unit"] = entry["faclCode"] or None
-
-        inmate["race"] = entry.get("race")
-        inmate["sex"] = entry.get("sex")
-        inmate["url"] = None
-
         def parse_date(datestr):
             return datetime.datetime.strptime(datestr, "%m/%d/%Y").date()
 
@@ -133,7 +119,7 @@ async def _query(
             )
             projected_release = None
 
-        inmate["release"] = (
+        release = (
             actual_release
             or projected_release
             or entry["projRelDate"]
@@ -141,19 +127,28 @@ async def _query(
             or None
         )
 
-        if inmate["release"] is None:
+        if release is None:
             LOGGER.debug("Failed to retrieve any release date.")
 
-        inmate["datetime_fetched"] = datetime.datetime.now()
-
-        return inmate
+        return QueryResult(
+            id=entry["inmateNum"],
+            jurisdiction="Federal",
+            first_name=entry["nameFirst"],
+            last_name=entry["nameLast"],
+            unit=entry["faclCode"],
+            race=entry.get("race", None),
+            sex=entry.get("gender", None),
+            url=None,
+            release=release,
+            datetime_fetched=datetime.datetime.now(),
+        )
 
     inmates = map(data_to_inmate, data)
 
     def is_in_texas(inmate):
         return inmate["unit"] in set.union(TEXAS_UNITS, SPECIAL_UNITS)
 
-    inmates = filter(is_in_texas, inmates)
+    inmates = filter(is_in_texas, inmates)  # type: ignore
 
     def has_not_been_released(inmate):
         try:
@@ -164,7 +159,7 @@ async def _query(
 
         return not released
 
-    inmates = filter(has_not_been_released, inmates)
+    inmates = filter(has_not_been_released, inmates)  # type: ignore
 
     return list(inmates)
 

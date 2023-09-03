@@ -6,8 +6,8 @@ import typing
 from urllib.parse import urljoin
 
 import aiohttp
-from bs4 import BeautifulSoup  # type: ignore
-from nameparser import HumanName  # type: ignore
+from bs4 import BeautifulSoup, Tag
+from nameparser import HumanName
 
 from .decorators import log_query_by_name, log_query_by_inmate_id
 
@@ -50,7 +50,7 @@ async def _query(  # pylint: disable=too-many-locals
     first_name: str = "",
     inmate_id: str = "",
     timeout: typing.Optional[float] = None,
-) -> typing.List[QueryResult]:
+) -> list[QueryResult]:
     """Private helper for querying TDCJ."""
 
     data = {
@@ -64,30 +64,30 @@ async def _query(  # pylint: disable=too-many-locals
         "firstName": first_name,
     }
 
-    timeout = aiohttp.ClientTimeout(total=timeout)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    client_timeout = aiohttp.ClientTimeout(total=timeout)
+    async with aiohttp.ClientSession(timeout=client_timeout) as session:
         async with session.post(SEARCH_URL, data=data) as response:
             html = await response.text()
 
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", {"class": "tdcj_table"})
 
-    if table is None:
+    if table is None or not isinstance(table, Tag):
         return []
 
     for linebreak in table.find_all("br"):
         linebreak.replace_with(" ")
 
-    rows = iter(table.findAll("tr"))
+    rows = iter(table.find_all("tr"))
 
-    # First row contains nothing.
     try:
-        next(rows)
+        next(rows)  # First row contains nothing.
+        header = next(rows)
     except StopIteration:
         return []
 
-    # Second row contains the keys.
-    keys = [ele.text.strip() for ele in next(rows).find_all("th")]
+    # Second row contains the column names.
+    keys = [ele.text.strip() for ele in header.find_all("th")]
 
     def row_to_entry(row):
         values = [ele.text.strip() for ele in row.find_all("td")]
@@ -97,26 +97,15 @@ async def _query(  # pylint: disable=too-many-locals
 
     entries = map(row_to_entry, rows)
 
-    def entry_to_inmate(entry: dict) -> dict:
+    def entry_to_inmate(entry: dict):
         """Convert TDCJ inmate entry to inmate dictionary."""
-        inmate = {}
-
-        inmate["id"] = entry["TDCJ Number"]
-        inmate["jurisdiction"] = "Texas"
 
         name = HumanName(entry.get("Name", ""))
-        inmate["first_name"] = name.first
-        inmate["last_name"] = name.last
-
-        inmate["unit"] = entry["Unit of Assignment"]
-
-        inmate["race"] = entry.get("Race", None)
-        inmate["sex"] = entry.get("Gender", None)
 
         def build_url(href):
             return urljoin(BASE_URL, href)
 
-        inmate["url"] = build_url(entry["href"]) if "href" in entry else None
+        url = build_url(entry["href"]) if "href" in entry else None
 
         def parse_release_date(release):
             return datetime.datetime.strptime(release, "%Y-%m-%d").date()
@@ -128,10 +117,18 @@ async def _query(  # pylint: disable=too-many-locals
         except ValueError:
             LOGGER.debug("Failed to parse release date '%s'", release)
 
-        inmate["release"] = release
-        inmate["datetime_fetched"] = datetime.datetime.now()
-
-        return inmate
+        return QueryResult(
+            id=entry["TDCJ Number"],
+            jurisdiction="Texas",
+            first_name=name.first,
+            last_name=name.last,
+            unit=entry["Unit of Assignment"],
+            race=entry.get("Race", None),
+            sex=entry.get("Gender", None),
+            url=url,
+            release=release,
+            datetime_fetched=datetime.datetime.now(),
+        )
 
     return list(map(entry_to_inmate, entries))
 
