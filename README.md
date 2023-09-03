@@ -52,3 +52,10 @@ The above queries return a list `inmates`; each inmate has the following fields:
 - `url` -- webpage if available
 - `release` -- release date if available
 - `datime_fetched` -- datetime that this entry was fetched
+
+See Also
+--------
+
+- [Read the Docs `pymates` documentation](https://pymates.readthedocs.io/en/latest/)
+- [Inside Books Project](https://insidebooksproject.org/)
+
