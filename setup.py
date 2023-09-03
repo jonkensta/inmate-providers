@@ -12,12 +12,12 @@ with open('LICENSE') as infile:
 
 setup(
     name='pymates',
-    version='0.1.1',
+    version='0.2.0',
     description='Module for programatically finding Texas inmates',
     long_description=README,
     author='Jonathan Starr',
     url='https://github.com/jonkensta/inmate-providers',
     license=LICENSE,
     packages=find_packages(),
-    install_requires=['bs4', 'requests', 'nameparser'],
+    install_requires=['bs4', 'aiohttp', 'nameparser'],
 )
