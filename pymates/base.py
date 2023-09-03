@@ -1,33 +1,37 @@
 """IBP inmate search utility."""
 
 import asyncio
-import logging
 import functools
+import logging
 import typing
 
 from . import fbop
 from . import tdcj
 
-LOGGER = logging.getLogger("PROVIDERS")
+Jurisdiction = typing.Literal["Texas", "Federal"]
 
-PROVIDERS = {
+PROVIDERS: dict[Jurisdiction, typing.Any] = {
     "Texas": tdcj,
     "Federal": fbop,
 }
 
-LOGGERS = {
+LOGGERS: dict[Jurisdiction, logging.Logger] = {
     "Texas": tdcj.LOGGER,
     "Federal": fbop.LOGGER,
 }
 
-Jurisdiction = typing.Literal["Texas", "Federal"]
+QueryResult = tdcj.QueryResult | fbop.QueryResult
 
 
 def preprocess_kwargs(wrapped):
     """Preprocess the keyword args for a query function."""
 
     @functools.wraps(wrapped)
-    async def wrapper(*args, jurisdictions=None, timeout=None):
+    async def wrapper(
+        *args,
+        jurisdictions: typing.Optional[typing.Iterable[Jurisdiction]] = None,
+        timeout: typing.Optional[float] = None,
+    ):
         if jurisdictions is None:
             jurisdictions = PROVIDERS.keys()
 
@@ -36,7 +40,7 @@ def preprocess_kwargs(wrapped):
             if jurisdiction not in PROVIDERS:
                 raise ValueError(f"Invalid jurisdiction '{jurisdiction}' given.")
 
-        kwargs = {
+        kwargs: dict[str, typing.Any] = {
             "jurisdictions": jurisdictions,
         }
 
@@ -52,7 +56,7 @@ def postprocess_results(wrapped):
     """Postprocess the results of a query function."""
 
     @functools.wraps(wrapped)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args, **kwargs) -> tuple[list[QueryResult], list[Exception]]:
         jurisdictions, aws = wrapped(*args, **kwargs)
         results = await asyncio.gather(*aws, return_exceptions=True)
 
@@ -83,7 +87,7 @@ def postprocess_results(wrapped):
 @postprocess_results
 def query_by_inmate_id(
     inmate_id: str | int,
-    jurisdictions: typing.Optional[typing.Iterable[Jurisdiction]] = None,
+    jurisdictions: typing.Iterable[Jurisdiction],
     timeout: typing.Optional[float] = 10.0,
 ):
     """Query jurisdictions with an inmate ID.
@@ -117,7 +121,7 @@ def query_by_inmate_id(
 def query_by_name(
     first: str,
     last: str,
-    jurisdictions: typing.Optional[typing.Iterable[Jurisdiction]] = None,
+    jurisdictions: typing.Iterable[Jurisdiction],
     timeout: typing.Optional[float] = 10.0,
 ):
     """Query jurisdictions with an inmate name.
