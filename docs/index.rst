@@ -17,7 +17,7 @@ This project makes use of the following third-party Python modules:
 
     * :py:class:`BeautifulSoup` for parsing HTML responses
     * :py:class:`nameparser.parser.HumanName` for parsing names
-    * :py:mod:`requests` for issuing HTTP requests
+    * :py:mod:`aiohttp` for issuing async HTTP requests
 
 To read more about the API and usage, keep reading below:
 
@@ -65,11 +65,11 @@ Querying with a ID:
 
 An example of querying with a numeric ID '88888888'::
 
-    >>> inmates, errors = pymates.query_by_inmate_id('88888888')
+    >>> inmates, errors = await pymates.query_by_inmate_id('88888888')
 
 Query with a name:
 ``````````````````
 
 An example of querying with a name, say "John Smith"::
 
-    >>> inmates, errors = pymates.query_by_name("John", "Smith")
+    >>> inmates, errors = await pymates.query_by_name("John", "Smith")
