@@ -108,14 +108,16 @@ async def _query(
         try:
             actual_release = parse_date(entry["actRelDate"])
         except ValueError:
-            LOGGER.debug("Failed to parse actual release date '%s", entry["actRelDate"])
+            LOGGER.debug(
+                "Failed to parse actual release date '%s'", entry["actRelDate"]
+            )
             actual_release = None
 
         try:
             projected_release = parse_date(entry["projRelDate"])
         except ValueError:
             LOGGER.debug(
-                "Failed to parse projected release date '%s", entry["projRelDate"]
+                "Failed to parse projected release date '%s'", entry["projRelDate"]
             )
             projected_release = None
 
