@@ -1,8 +1,8 @@
 """FBOP inmate query implementation."""
 
-import typing
-import logging
 import datetime
+import logging
+import typing
 
 import aiohttp
 
