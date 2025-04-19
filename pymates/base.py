@@ -50,7 +50,6 @@ def wrap_query(wrapped):
                 message = f"Query returned '{error_name}: {error}'."
                 logger.error(message)
                 errors.append(error)
-                raise
 
         return inmates, errors
 
