@@ -82,8 +82,7 @@ def query_by_inmate_id(
 
     """
     provider = PROVIDERS[jurisdiction]
-    inmate = provider.query_by_inmate_id(inmate_id=inmate_id, timeout=timeout)
-    return [inmate]
+    return provider.query_by_inmate_id(inmate_id=inmate_id, timeout=timeout)
 
 
 @wrap_query
@@ -116,5 +115,4 @@ def query_by_name(
 
     """
     provider = PROVIDERS[jurisdiction]
-    inmates = provider.query_by_name(first=first, last=last, timeout=timeout)
-    return inmates
+    return provider.query_by_name(first=first, last=last, timeout=timeout)
