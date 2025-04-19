@@ -4,7 +4,7 @@ import datetime
 import logging
 import typing
 
-import aiohttp
+import requests
 
 from .decorators import log_query_by_inmate_id, log_query_by_name
 
@@ -71,7 +71,7 @@ class QueryResult(typing.TypedDict):
     datetime_fetched: datetime.datetime
 
 
-async def _query(
+def _query(
     last_name: str = "",
     first_name: str = "",
     inmate_id: str = "",
@@ -91,10 +91,10 @@ async def _query(
         "inmateNum": inmate_id,
     }
 
-    client_timeout = aiohttp.ClientTimeout(total=timeout)
-    async with aiohttp.ClientSession(timeout=client_timeout) as session:
-        async with session.get(URL, params=params) as response:
-            json = await response.json()
+    with requests.Session() as session:
+        response = session.get(URL, params=params, timeout=timeout)
+        response.raise_for_status()
+        json = response.json()
 
     try:
         data = json["InmateLocator"]
@@ -167,13 +167,13 @@ async def _query(
 
 
 @log_query_by_name(LOGGER)
-async def query_by_name(first, last, **kwargs):
+def query_by_name(first, last, **kwargs):
     """Query the FBOP database with an inmate name."""
-    return await _query(first_name=first, last_name=last, **kwargs)
+    return _query(first_name=first, last_name=last, **kwargs)
 
 
 @log_query_by_inmate_id(LOGGER)
-async def query_by_inmate_id(inmate_id: str | int, **kwargs):
+def query_by_inmate_id(inmate_id: str | int, **kwargs):
     """Query the FBOP database with an inmate id."""
     try:
         inmate_id = format_inmate_id(inmate_id)
@@ -181,4 +181,4 @@ async def query_by_inmate_id(inmate_id: str | int, **kwargs):
         msg = f"'{inmate_id}' is not a valid Texas inmate number"
         raise ValueError(msg) from exc
 
-    return await _query(inmate_id=inmate_id, **kwargs)
+    return _query(inmate_id=inmate_id, **kwargs)

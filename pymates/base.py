@@ -1,12 +1,10 @@
 """IBP inmate search utility."""
 
-import asyncio
 import functools
 import logging
 import typing
 
-from . import fbop
-from . import tdcj
+from . import fbop, tdcj
 
 Jurisdiction = typing.Literal["Texas", "Federal"]
 
@@ -23,11 +21,11 @@ LOGGERS: dict[Jurisdiction, logging.Logger] = {
 QueryResult = tdcj.QueryResult | fbop.QueryResult
 
 
-def preprocess_kwargs(wrapped):
-    """Preprocess the keyword args for a query function."""
+def wrap_query(wrapped):
+    """query function."""
 
     @functools.wraps(wrapped)
-    async def wrapper(
+    def wrapper(
         *args,
         jurisdictions: typing.Optional[typing.Iterable[Jurisdiction]] = None,
         timeout: typing.Optional[float] = None,
@@ -40,54 +38,29 @@ def preprocess_kwargs(wrapped):
             if jurisdiction not in PROVIDERS:
                 raise ValueError(f"Invalid jurisdiction '{jurisdiction}' given.")
 
-        kwargs: dict[str, typing.Any] = {
-            "jurisdictions": jurisdictions,
-        }
+        inmates = []
+        errors = []
 
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-
-        return await wrapped(*args, **kwargs)
-
-    return wrapper
-
-
-def postprocess_results(wrapped):
-    """Postprocess the results of a query function."""
-
-    @functools.wraps(wrapped)
-    async def wrapper(*args, **kwargs) -> tuple[list[QueryResult], list[Exception]]:
-        jurisdictions, aws = wrapped(*args, **kwargs)
-        results = await asyncio.gather(*aws, return_exceptions=True)
-
-        def is_exception(result) -> bool:
-            return isinstance(result, Exception)
-
-        errors = list(filter(is_exception, results))
-
-        for jurisdiction, result in zip(jurisdictions, results):
-            if is_exception(result):
-                class_name = result.__class__.__name__
-                error = f"Query returned '{class_name}: {result}'."
-                LOGGERS[jurisdiction].error(error)
-
-        def is_not_exception(result) -> bool:
-            return not is_exception(result)
-
-        inmates = [
-            item for sublist in filter(is_not_exception, results) for item in sublist
-        ]
+        for jurisdiction in jurisdictions:
+            logger = LOGGERS[jurisdiction]
+            try:
+                inmates.extend(wrapped(*args, jurisdiction, timeout=timeout))
+            except Exception as error:  # pylint: disable=broad-exception-caught
+                error_name = error.__class__.__name__
+                message = f"Query returned '{error_name}: {error}'."
+                logger.error(message)
+                errors.append(error)
+                raise
 
         return inmates, errors
 
     return wrapper
 
 
-@preprocess_kwargs
-@postprocess_results
+@wrap_query
 def query_by_inmate_id(
     inmate_id: str | int,
-    jurisdictions: typing.Iterable[Jurisdiction],
+    jurisdiction: Jurisdiction,
     timeout: typing.Optional[float] = 10.0,
 ):
     """Query jurisdictions with an inmate ID.
@@ -109,19 +82,16 @@ def query_by_inmate_id(
         - :py:data:`errors` -- errors encountered while searching.
 
     """
-    aws = [
-        PROVIDERS[j].query_by_inmate_id(inmate_id=inmate_id, timeout=timeout)
-        for j in jurisdictions
-    ]
-    return jurisdictions, aws
+    provider = PROVIDERS[jurisdiction]
+    inmate = provider.query_by_inmate_id(inmate_id=inmate_id, timeout=timeout)
+    return [inmate]
 
 
-@preprocess_kwargs
-@postprocess_results
+@wrap_query
 def query_by_name(
     first: str,
     last: str,
-    jurisdictions: typing.Iterable[Jurisdiction],
+    jurisdiction: Jurisdiction,
     timeout: typing.Optional[float] = 10.0,
 ):
     """Query jurisdictions with an inmate name.
@@ -146,8 +116,6 @@ def query_by_name(
         - :py:data:`errors` -- errors encountered while searching.
 
     """
-    aws = [
-        PROVIDERS[j].query_by_name(first=first, last=last, timeout=timeout)
-        for j in jurisdictions
-    ]
-    return jurisdictions, aws
+    provider = PROVIDERS[jurisdiction]
+    inmates = provider.query_by_name(first=first, last=last, timeout=timeout)
+    return inmates

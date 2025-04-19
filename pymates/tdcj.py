@@ -5,12 +5,11 @@ import logging
 import typing
 from urllib.parse import urljoin
 
-import aiohttp
+import requests
 from bs4 import BeautifulSoup, Tag
 from nameparser import HumanName
 
-from .decorators import log_query_by_name, log_query_by_inmate_id
-
+from .decorators import log_query_by_inmate_id, log_query_by_name
 
 LOGGER = logging.getLogger("PROVIDERS.TDCJ")
 
@@ -45,7 +44,7 @@ class QueryResult(typing.TypedDict):
     datetime_fetched: datetime.datetime
 
 
-async def _query(  # pylint: disable=too-many-locals
+def _query(  # pylint: disable=too-many-locals
     last_name: str = "",
     first_name: str = "",
     inmate_id: str = "",
@@ -64,10 +63,10 @@ async def _query(  # pylint: disable=too-many-locals
         "firstName": first_name,
     }
 
-    client_timeout = aiohttp.ClientTimeout(total=timeout)
-    async with aiohttp.ClientSession(timeout=client_timeout) as session:
-        async with session.post(SEARCH_URL, data=data) as response:
-            html = await response.text()
+    with requests.Session() as session:
+        response = requests.post(SEARCH_URL, data=data)
+        response.raise_for_status()
+        html = response.text
 
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", {"class": "tdcj_table"})
@@ -134,13 +133,13 @@ async def _query(  # pylint: disable=too-many-locals
 
 
 @log_query_by_name(LOGGER)
-async def query_by_name(first, last, **kwargs):
+def query_by_name(first, last, **kwargs):
     """Query the TDCJ database with an inmate name."""
-    return await _query(first_name=first, last_name=last, **kwargs)
+    return _query(first_name=first, last_name=last, **kwargs)
 
 
 @log_query_by_inmate_id(LOGGER)
-async def query_by_inmate_id(inmate_id: str | int, **kwargs):
+def query_by_inmate_id(inmate_id: str | int, **kwargs):
     """Query the TDCJ database with an inmate id."""
     try:
         inmate_id = format_inmate_id(inmate_id)
@@ -148,4 +147,4 @@ async def query_by_inmate_id(inmate_id: str | int, **kwargs):
         msg = f"'{inmate_id}' is not a valid Texas inmate number"
         raise ValueError(msg) from exc
 
-    return await _query(inmate_id=inmate_id, **kwargs)
+    return _query(inmate_id=inmate_id, **kwargs)

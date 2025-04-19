@@ -1,7 +1,7 @@
 """Utility decorators for query functions."""
 
-import logging
 import functools
+import logging
 
 
 def log_query_by_inmate_id(logger: logging.Logger):
@@ -9,9 +9,9 @@ def log_query_by_inmate_id(logger: logging.Logger):
 
     def decorator(wrapped):
         @functools.wraps(wrapped)
-        async def wrapper(inmate_id, **kwargs):
+        def wrapper(inmate_id, **kwargs):
             logger.debug("Querying with ID '%s'", inmate_id)
-            matches = await wrapped(inmate_id, **kwargs)
+            matches = wrapped(inmate_id, **kwargs)
 
             if not matches:
                 logger.debug("No results returned")
@@ -34,9 +34,9 @@ def log_query_by_name(logger: logging.Logger):
 
     def decorator(wrapped):
         @functools.wraps(wrapped)
-        async def wrapper(first, last, **kwargs):
+        def wrapper(first, last, **kwargs):
             logger.debug("Querying with name '%s, %s'", last, first)
-            matches = await wrapped(first, last, **kwargs)
+            matches = wrapped(first, last, **kwargs)
 
             if not matches:
                 logger.debug("No results were returned")
