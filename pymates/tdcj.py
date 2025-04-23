@@ -1,11 +1,13 @@
 """TDCJ inmate query implementation."""
 
+import contextlib
 import datetime
 import logging
+import ssl
 import typing
+import urllib.request
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup, Tag
 from nameparser import HumanName
 
@@ -44,30 +46,51 @@ class QueryResult(typing.TypedDict):
     datetime_fetched: datetime.datetime
 
 
-def _query(  # pylint: disable=too-many-locals
-    last_name: str = "",
-    first_name: str = "",
-    inmate_id: str = "",
-    timeout: typing.Optional[float] = None,
-) -> list[QueryResult]:
-    """Private helper for querying TDCJ."""
-
+@contextlib.contextmanager
+def _post_search_form(data: dict, timeout: float | None = None):
     data = {
         "btnSearch": "Search",
         "gender": "ALL",
         "page": "index",
         "race": "ALL",
         "sid": "",
-        "tdcj": inmate_id,
-        "lastName": last_name,
-        "firstName": first_name,
+        "tdcj": "",
+        "lastName": "",
+        "firstName": "",
+        **data,
     }
 
-    with requests.Session() as session:
-        response = requests.post(SEARCH_URL, data=data)
-        response.raise_for_status()
-        html = response.text
+    encoded = urllib.parse.urlencode(data).encode("utf-8")
 
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+
+    request = urllib.request.Request(SEARCH_URL, data=encoded, method="POST")
+
+    with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+        yield response
+
+
+def _query(  # pylint: disable=too-many-locals
+    last_name: str = "",
+    first_name: str = "",
+    inmate_id: str = "",
+    timeout: float | None = None,
+) -> list[QueryResult]:
+    """Private helper for querying TDCJ."""
+
+    data = {
+        "lastName": last_name,
+        "firstName": first_name,
+        "tdcj": inmate_id,
+    }
+
+    with _post_search_form(data, timeout=timeout) as response:
+        charset = response.info().get_content_charset() or "utf-8"
+        text = response.read().decode(charset)
+
+    html = text
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", {"class": "tdcj_table"})
 
@@ -104,7 +127,7 @@ def _query(  # pylint: disable=too-many-locals
         def build_url(href):
             return urljoin(BASE_URL, href)
 
-        url = build_url(entry["href"]) if "href" in entry else None
+        url = build_url(str(entry["href"])) if "href" in entry else None
 
         def parse_release_date(release):
             return datetime.datetime.strptime(release, "%Y-%m-%d").date()
