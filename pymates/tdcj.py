@@ -3,7 +3,7 @@
 import contextlib
 import datetime
 import logging
-import ssl
+import subprocess
 import typing
 import urllib.request
 from urllib.parse import urljoin
@@ -46,30 +46,44 @@ class QueryResult(typing.TypedDict):
     datetime_fetched: datetime.datetime
 
 
-@contextlib.contextmanager
-def _post_search_form(data: dict, timeout: float | None = None):
-    data = {
-        "btnSearch": "Search",
-        "gender": "ALL",
-        "page": "index",
-        "race": "ALL",
-        "sid": "",
-        "tdcj": "",
-        "lastName": "",
-        "firstName": "",
-        **data,
-    }
+def _curl_search_url(
+    last_name: str = "",
+    first_name: str = "",
+    inmate_id: str = "",
+    timeout: float | None = None,
+):
+    cmd = [
+        "curl",
+        "--ipv4",
+        "-d",
+        "btnSearch=Search",
+        "-d",
+        "gender=ALL",
+        "-d",
+        "race=ALL",
+        "-d",
+        f"tdcj={inmate_id}",
+        "-d",
+        f"lastName={last_name}",
+        "-d",
+        f"firstName={first_name}",
+        "-d",
+        "page=index",
+        "-d",
+        "sid=",
+        SEARCH_URL,
+    ]
 
-    encoded = urllib.parse.urlencode(data).encode("utf-8")
+    # Execute the command
+    result = subprocess.run(
+        cmd,
+        capture_output=True,  # Capture stdout and stderr
+        text=True,
+        check=True,
+        timeout=timeout,
+    )
 
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-
-    request = urllib.request.Request(SEARCH_URL, data=encoded, method="POST")
-
-    with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
-        yield response
+    return result.stdout
 
 
 def _query(  # pylint: disable=too-many-locals
@@ -80,17 +94,7 @@ def _query(  # pylint: disable=too-many-locals
 ) -> list[QueryResult]:
     """Private helper for querying TDCJ."""
 
-    data = {
-        "lastName": last_name,
-        "firstName": first_name,
-        "tdcj": inmate_id,
-    }
-
-    with _post_search_form(data, timeout=timeout) as response:
-        charset = response.info().get_content_charset() or "utf-8"
-        text = response.read().decode(charset)
-
-    html = text
+    html = _curl_search_url(last_name, first_name, inmate_id, timeout)
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", {"class": "tdcj_table"})
 
@@ -112,12 +116,15 @@ def _query(  # pylint: disable=too-many-locals
     keys = [ele.text.strip() for ele in header.find_all("th")]
 
     def row_to_entry(row):
-        values = [ele.text.strip() for ele in row.find_all("td")]
+        values = [ele.get_text().strip() for ele in row.find_all("td")]
+        if not values:
+            return None
         entry = dict(zip(keys, values))
-        entry["href"] = row.find("a").get("href")
+        anchor = row.find("a")
+        entry["href"] = anchor.get("href") if anchor is not None else None
         return entry
 
-    entries = map(row_to_entry, rows)
+    entries = filter(None, map(row_to_entry, rows))
 
     def entry_to_inmate(entry: dict):
         """Convert TDCJ inmate entry to inmate dictionary."""
