@@ -1,10 +1,10 @@
 """FBOP inmate query implementation."""
 
 import datetime
+import json
 import logging
+import subprocess
 import typing
-
-import requests
 
 from .decorators import log_query_by_inmate_id, log_query_by_name
 
@@ -71,13 +71,17 @@ class QueryResult(typing.TypedDict):
     datetime_fetched: datetime.datetime
 
 
-def _query(
+def _curl_search_url(
     last_name: str = "",
     first_name: str = "",
     inmate_id: str = "",
     timeout: typing.Optional[float] = None,
-) -> list[QueryResult]:
-    """Private helper for querying FBOP."""
+) -> dict:
+    """Query FBOP using a curl subprocess call."""
+
+    command = ["curl", "-G", "-f", "-s"]
+
+    command.append(URL)
 
     params = {
         "age": "",
@@ -91,13 +95,32 @@ def _query(
         "inmateNum": inmate_id,
     }
 
-    with requests.Session() as session:
-        response = session.get(URL, params=params, timeout=timeout)
-        response.raise_for_status()
-        json = response.json()
+    for key, value in params.items():
+        command.append("--data-urlencode")
+        command.append(f"{key}={value}")
+
+    if timeout is not None:
+        command.extend(["--max-time", str(float(timeout))])
+
+    result = subprocess.run(
+        command, capture_output=True, text=True, check=True, encoding="utf-8"
+    )
+
+    return json.loads(result.stdout.strip())
+
+
+def _query(
+    last_name: str = "",
+    first_name: str = "",
+    inmate_id: str = "",
+    timeout: typing.Optional[float] = None,
+) -> list[QueryResult]:
+    """Private helper for querying FBOP."""
+
+    data = _curl_search_url(last_name, first_name, inmate_id, timeout)
 
     try:
-        data = json["InmateLocator"]
+        data = data["InmateLocator"]
     except KeyError:
         return []
 
