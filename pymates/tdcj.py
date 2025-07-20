@@ -100,28 +100,28 @@ def _query(  # pylint: disable=too-many-locals
     table = soup.find("table", {"class": "tdcj_table"})
 
     if table is None or not isinstance(table, Tag):
+        LOGGER.debug("Failed to find TDCJ table.")
         return []
 
     for linebreak in table.find_all("br"):
         linebreak.replace_with(" ")
 
     header_tag = table.find("thead")
-    body_tag = table.find("tbody")
+    if header_tag is None or not isinstance(header_tag, Tag):
+        LOGGER.debug("Failed to find TDCJ table header.")
+        return []
 
-    if (
-        header_tag is None
-        or body_tag is None
-        or not isinstance(header_tag, Tag)
-        or not isinstance(body_tag, Tag)
-    ):
+    body_tag = table.find("tbody")
+    if body_tag is None or not isinstance(body_tag, Tag):
+        LOGGER.debug("Failed to find TDCJ table body.")
         return []
 
     header = header_tag.find("tr")
     if header is None or not isinstance(header, Tag):
+        LOGGER.debug("Failed to find TDCJ table header row.")
         return []
 
     keys = [th.get_text(" ", strip=True) for th in header.find_all("th")]
-
     rows: list[Tag] = body_tag.find_all("tr")
 
     def row_to_inmate(row: Tag):
