@@ -9,7 +9,7 @@ import urllib.request
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, Tag
-from nameparser import HumanName
+from nameparser import HumanName  # type: ignore
 
 from .decorators import log_query_by_inmate_id, log_query_by_name
 
@@ -40,7 +40,7 @@ class QueryResult(typing.TypedDict):
     race: typing.Optional[str]
     sex: typing.Optional[str]
 
-    url: str
+    url: typing.Optional[str]
     release: typing.Optional[str | datetime.date]
 
     datetime_fetched: datetime.datetime
@@ -95,6 +95,7 @@ def _query(  # pylint: disable=too-many-locals
     """Private helper for querying TDCJ."""
 
     html = _curl_search_url(last_name, first_name, inmate_id, timeout)
+
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", {"class": "tdcj_table"})
 
@@ -104,32 +105,40 @@ def _query(  # pylint: disable=too-many-locals
     for linebreak in table.find_all("br"):
         linebreak.replace_with(" ")
 
-    rows = iter(table.find_all("tr"))
+    header_tag = table.find("thead")
+    body_tag = table.find("tbody")
 
-    try:
-        next(rows)  # First row contains nothing.
-        header = next(rows)
-    except StopIteration:
+    if (
+        header_tag is None
+        or body_tag is None
+        or not isinstance(header_tag, Tag)
+        or not isinstance(body_tag, Tag)
+    ):
         return []
 
-    # Second row contains the column names.
-    keys = [ele.text.strip() for ele in header.find_all("th")]
+    header = header_tag.find("tr")
+    if header is None or not isinstance(header, Tag):
+        return []
 
-    def row_to_entry(row):
-        values = [ele.get_text().strip() for ele in row.find_all("td")]
+    keys = [th.get_text(" ", strip=True) for th in header.find_all("th")]
+
+    rows: list[Tag] = body_tag.find_all("tr")
+
+    def row_to_inmate(row: Tag):
+        """Convert TDCJ table row to inmate dictionary."""
+
+        cells = row.find_all(["th", "td"])
+        values = [c.get_text(" ", strip=True) for c in cells]
         if not values:
             return None
+
         entry = dict(zip(keys, values))
         anchor = row.find("a")
-        entry["href"] = anchor.get("href") if anchor is not None else None
-        return entry
-
-    entries = filter(None, map(row_to_entry, rows))
-
-    def entry_to_inmate(entry: dict):
-        """Convert TDCJ inmate entry to inmate dictionary."""
+        entry["href"] = anchor.get("href") if isinstance(anchor, Tag) else None
 
         name = HumanName(entry.get("Name", ""))
+        first: str = name.first
+        last: str = name.last
 
         def build_url(href):
             return urljoin(BASE_URL, href)
@@ -149,8 +158,8 @@ def _query(  # pylint: disable=too-many-locals
         return QueryResult(
             id=entry["TDCJ Number"],
             jurisdiction="Texas",
-            first_name=name.first,
-            last_name=name.last,
+            first_name=first,
+            last_name=last,
             unit=entry["Unit of Assignment"],
             race=entry.get("Race", None),
             sex=entry.get("Gender", None),
@@ -159,7 +168,7 @@ def _query(  # pylint: disable=too-many-locals
             datetime_fetched=datetime.datetime.now(),
         )
 
-    return list(map(entry_to_inmate, entries))
+    return [inmate for row in rows if (inmate := row_to_inmate(row)) is not None]
 
 
 @log_query_by_name(LOGGER)
