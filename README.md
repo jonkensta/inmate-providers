@@ -1,6 +1,10 @@
 pymates
 =======
 
+> **Deprecated:** this repository is no longer maintained. The TDCJ and FBOP
+> scrapers now live in [ibp-backend](https://github.com/jonkensta/ibp-backend)
+> under `ibp/providers/`.
+
 This Python module permits programmatic lookup of state and Federal Texas inmates.
 To do this, the module queries the TDCJ and FBOP sites and aggregates the results together.
 Lookup can be performed by name or by identifier
